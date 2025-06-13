@@ -15,8 +15,7 @@ This repo showcases experimental and practical use cases for building smarter LL
 | Notebook | Description |
 |----------|-------------|
 | [`github_lookup.ipynb`](github_lookup.ipynb) | Uses Tavily and OpenAI to search for a GitHub user, retrieve their public profile, and summarize it using an LLM + Pydantic output parser. |
-|
-
+| [`react_news_summary_agent.ipynb`](react_news_summary_agent.ipynb) | A ReAct-based LangChain agent that fetches recent news on a topic, summarizes each article, and estimates reading level and time using custom tools. |
 ---
 
 ## 🛠️ Requirements
