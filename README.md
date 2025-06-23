@@ -18,6 +18,7 @@ This repo showcases experimental and practical use cases for building smarter LL
 | [`react_news_summary_agent.ipynb`](react_news_summary_agent.ipynb) | A ReAct-based LangChain agent that fetches recent news on a topic, summarizes each article, and estimates reading level and time using custom tools. |
 | [`ica_rag_pipeline.ipynb`](ica_rag_pipeline.ipynb) | A LangChain + Pinecone pipeline that ingests ICA content from PDFs and YouTube, then answers user questions using retrieval-augmented generation. |
 | [`langgraph_reflection_agent.ipynb`](langgraph_reflection_agent.ipynb) | An iterative tweet revision loop using LangGraph. Simulates alternating tweet generation and critique using ChatOpenAI and a branching message graph. |
+| [`reflexion_agent.ipynb`](reflexion_agent.ipynb) | Implements a Reflexion-style research agent using LangGraph and Tavily. The agent answers a question, reflects on its response, and revises using real-time search. |
 ---
 
 ## 🛠️ Requirements
