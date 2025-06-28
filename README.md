@@ -19,6 +19,8 @@ This repo showcases experimental and practical use cases for building smarter LL
 | [`ica_rag_pipeline.ipynb`](ica_rag_pipeline.ipynb) | A LangChain + Pinecone pipeline that ingests ICA content from PDFs and YouTube, then answers user questions using retrieval-augmented generation. |
 | [`langgraph_reflection_agent.ipynb`](langgraph_reflection_agent.ipynb) | An iterative tweet revision loop using LangGraph. Simulates alternating tweet generation and critique using ChatOpenAI and a branching message graph. |
 | [`reflexion_agent.ipynb`](reflexion_agent.ipynb) | Implements a Reflexion-style research agent using LangGraph and Tavily. The agent answers a question, reflects on its response, and revises using real-time search. |
+| [`agentic_rag_flow.ipynb`](agentic_rag_flow.ipynb) | A dynamic RAG pipeline using LangGraph with document grading, hallucination detection, and adaptive routing. Inspired by Self-RAG (Asai et al., 2023) and Adaptive-RAG (Jeong et al., 2024). |
+
 ---
 
 ## 🛠️ Requirements
