@@ -1,0 +1,38 @@
+[project]
+name = "backonthelangchain"
+version = "0.1.0"
+description = "Personal sandbox for RAG, agents, and LangGraph patterns."
+requires-python = ">=3.10"
+dependencies = [
+    "langchain-core",
+    "langchain-openai",
+    "langgraph",
+    "python-dotenv",
+    "pydantic",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+rag = [
+    "langchain-community",
+    "faiss-cpu",
+]
+
+notebooks = [
+    "jupyter",
+    "ipykernel",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 88
