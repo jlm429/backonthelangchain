@@ -3,6 +3,7 @@
 Usage:
     python examples/run_support_router.py
     python examples/run_support_router.py "I was charged twice this month"
+    python examples/run_safe_support_router.py "I hate your support team. They are worthless idiots. I was charged twice this month." -> NO SAFETY GATE - QUERY ALLOWED
 """
 
 import sys
@@ -12,30 +13,27 @@ from backonthelangchain.agents import build_support_router_graph
 from backonthelangchain.utils.env import load_project_env
 
 
-EXAMPLE_QUERIES = [
-    "I cannot log in after enabling MFA.",
-    "I was charged twice this month.",
-]
-
-
 def main() -> None:
     load_project_env()
 
-    queries = [" ".join(sys.argv[1:])] if len(sys.argv) > 1 else EXAMPLE_QUERIES
+    if len(sys.argv) > 1:
+        query = " ".join(sys.argv[1:])
+    else:
+        query = input("User query> ").strip()
 
     graph = build_support_router_graph()
 
-    for i, query in enumerate(queries, start=1):
-        print(f"\n--- Example {i} ---")
-        print(f"User query: {query}")
+    response = graph.invoke(
+        {"user_query": query},
+        config={
+            "configurable": {
+                "thread_id": "support-router-demo",
+            }
+        },
+    )
 
-        response = graph.invoke(
-            {"user_query": query},
-            config={"configurable": {"thread_id": f"support-router-demo-{i}"}},
-        )
-
-        print("\nAnswer:")
-        pprint(response["answer"])
+    print("\nAnswer:")
+    pprint(response["answer"])
 
 
 if __name__ == "__main__":

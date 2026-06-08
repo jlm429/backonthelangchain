@@ -1,32 +1,63 @@
-"""Node functions for the support-router graph."""
+"""Node functions for the support-router graph.
 
-from langchain_core.messages import HumanMessage, SystemMessage
+Nodes are intentionally thin LangGraph adapters. Reusable business or provider
+logic lives in services/ so it can be tested and reused outside this graph.
+"""
 
-from backonthelangchain.agents.prompts import (
-    BILLING_PROMPT,
-    ROUTER_PROMPT,
-    TECH_SUPPORT_PROMPT,
-)
 from backonthelangchain.agents.schemas import (
     RouteNodeName,
+    SafetyGateNodeName,
     SupportRouterState,
 )
-from backonthelangchain.agents.tools import (
-    check_system_status,
-    get_subscription_status,
+from backonthelangchain.agents.services import (
+    BillingService,
+    OpenAIModerationSafetyService,
+    RouterService,
+    TechSupportService,
 )
 
 
-def make_router_node(router_model):
-    """Create a router node bound to a structured-output model."""
+def make_safety_check_node(
+    safety_service: OpenAIModerationSafetyService,
+):
+    """Create a node that checks the user query before routing."""
+
+    def safety_check_node(state: SupportRouterState) -> SupportRouterState:
+        result = safety_service.check(state["user_query"])
+        return {
+            "is_safe": result.is_safe,
+            "moderation_flagged": result.flagged,
+            "moderation_model": result.model,
+            "moderation_categories": result.categories,
+            "moderation_category_scores": result.category_scores,
+            "safety_reason": result.reason,
+        }
+
+    return safety_check_node
+
+
+def safety_gate(state: SupportRouterState) -> SafetyGateNodeName:
+    """Route safe requests onward and block flagged requests."""
+    if state.get("is_safe", False):
+        return "router"
+    return "blocked_response"
+
+
+def blocked_response_node(state: SupportRouterState) -> SupportRouterState:
+    """Return a safe response when moderation blocks the request."""
+    return {
+        "answer": (
+            "I cannot assist with that request. "
+            "Please rephrase your question in a safe and appropriate way."
+        )
+    }
+
+
+def make_router_node(router_service: RouterService):
+    """Create a router node bound to a router service."""
 
     def router_node(state: SupportRouterState) -> SupportRouterState:
-        decision = router_model.invoke(
-            [
-                ROUTER_PROMPT,
-                HumanMessage(content=state["user_query"]),
-            ]
-        )
+        decision = router_service.route(state["user_query"])
         return {
             "domain": decision.domain,
             "route_reason": decision.reason,
@@ -42,41 +73,27 @@ def pick_route(state: SupportRouterState) -> RouteNodeName:
     return "billing_answer"
 
 
-def make_tech_support_node(chat_model):
-    """Create a tech-support node bound to a chat model."""
+def make_tech_support_node(tech_support_service: TechSupportService):
+    """Create a tech-support node bound to a tech-support service."""
 
     def tech_support_answer(state: SupportRouterState) -> SupportRouterState:
-        tool_result = check_system_status.invoke({})
-        response = chat_model.invoke(
-            [
-                TECH_SUPPORT_PROMPT,
-                SystemMessage(content=f"Tool result:\n{tool_result}"),
-                HumanMessage(content=state["user_query"]),
-            ]
-        )
+        answer, tool_result = tech_support_service.answer(state["user_query"])
         return {
             "tool_result": tool_result,
-            "answer": response.content,
+            "answer": answer,
         }
 
     return tech_support_answer
 
 
-def make_billing_node(billing_model):
-    """Create a billing node bound to a structured-output model."""
+def make_billing_node(billing_service: BillingService):
+    """Create a billing node bound to a billing service."""
 
     def billing_answer(state: SupportRouterState) -> SupportRouterState:
-        tool_result = get_subscription_status.invoke({})
-        response = billing_model.invoke(
-            [
-                BILLING_PROMPT,
-                SystemMessage(content=f"Tool result:\n{tool_result}"),
-                HumanMessage(content=state["user_query"]),
-            ]
-        )
+        answer, tool_result = billing_service.answer(state["user_query"])
         return {
             "tool_result": tool_result,
-            "answer": response.model_dump(),
+            "answer": answer.model_dump(),
         }
 
     return billing_answer
