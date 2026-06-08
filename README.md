@@ -33,7 +33,17 @@ LANGSMITH_API_KEY=your_langsmith_key
 
 ### Support Router
 
-A LangGraph workflow that routes user requests to specialized support flows.
+A basic LangGraph routing workflow that sends user requests to specialized support flows.
+
+Pattern demonstrated:
+
+```text
+START
+  |
+router
+ /     \
+tech   billing
+```
 
 Run:
 
@@ -48,11 +58,50 @@ poetry run python examples/run_support_router.py \
     "I was charged twice this month."
 ```
 
-
-## Project Structure
+Example queries:
 
 ```text
-src/backonthelangchain/
-├── agents/
-├── rag/
-└── utils/
+I cannot log in after enabling MFA.
+I was charged twice this month.
+```
+
+---
+
+### Safety-Gated Support Router
+
+Extends the router workflow with a pre-router safety check using OpenAI's moderation API.
+
+
+
+```text
+START
+  |
+safety_check
+  |
+  +---- blocked_response
+  |
+router
+ /     \
+tech   billing
+```
+
+Run:
+
+```bash
+poetry run python examples/run_safe_support_router.py
+```
+
+Or provide a custom query:
+
+```bash
+poetry run python examples/run_safe_support_router.py \
+    "I cannot log in after enabling MFA."
+```
+
+Example queries:
+
+```text
+I hate your support team. They are worthless idiots.
+I was charged twice this month.
+```
+
