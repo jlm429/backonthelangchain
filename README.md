@@ -35,8 +35,6 @@ LANGSMITH_API_KEY=your_langsmith_key
 
 A basic LangGraph routing workflow that sends user requests to specialized support flows.
 
-Pattern demonstrated:
-
 ```text
 START
   |
@@ -70,8 +68,6 @@ I was charged twice this month.
 ### Safety-Gated Support Router
 
 Extends the router workflow with a pre-router safety check using OpenAI's moderation API.
-
-
 
 ```text
 START
