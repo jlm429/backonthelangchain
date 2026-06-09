@@ -2,7 +2,7 @@
 name = "backonthelangchain"
 version = "0.1.0"
 description = "Personal sandbox for RAG, agents, and LangGraph patterns."
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.14"
 dependencies = [
     "langchain-core",
     "langchain-openai",
@@ -20,6 +20,9 @@ dev = [
 rag = [
     "langchain-community",
     "faiss-cpu",
+    "voyageai",
+    "llama-index-core",
+    "numpy>=1.26,<2.3",
 ]
 
 notebooks = [

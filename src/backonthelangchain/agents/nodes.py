@@ -1,7 +1,7 @@
-"""Node functions for the support-router graph.
+"""Node functions for support-router graphs.
 
 Nodes are intentionally thin LangGraph adapters. Reusable business or provider
-logic lives in services/ so it can be tested and reused outside this graph.
+logic lives in services/ so it can be tested and reused outside these graphs.
 """
 
 from backonthelangchain.agents.schemas import (
@@ -13,6 +13,7 @@ from backonthelangchain.agents.services import (
     BillingService,
     OpenAIModerationSafetyService,
     RouterService,
+    TechSupportRAGService,
     TechSupportService,
 )
 
@@ -38,13 +39,16 @@ def make_safety_check_node(
 
 def safety_gate(state: SupportRouterState) -> SafetyGateNodeName:
     """Route safe requests onward and block flagged requests."""
+
     if state.get("is_safe", False):
         return "router"
+
     return "blocked_response"
 
 
 def blocked_response_node(state: SupportRouterState) -> SupportRouterState:
     """Return a safe response when moderation blocks the request."""
+
     return {
         "answer": (
             "I cannot assist with that request. "
@@ -68,13 +72,15 @@ def make_router_node(router_service: RouterService):
 
 def pick_route(state: SupportRouterState) -> RouteNodeName:
     """Conditional edge function used by LangGraph."""
+
     if state["domain"] == "tech_support":
         return "tech_support_answer"
+
     return "billing_answer"
 
 
 def make_tech_support_node(tech_support_service: TechSupportService):
-    """Create a tech-support node bound to a tech-support service."""
+    """Create a tech-support node bound to a basic tech-support service."""
 
     def tech_support_answer(state: SupportRouterState) -> SupportRouterState:
         answer, tool_result = tech_support_service.answer(state["user_query"])
@@ -84,6 +90,23 @@ def make_tech_support_node(tech_support_service: TechSupportService):
         }
 
     return tech_support_answer
+
+
+def make_tech_support_rag_node(
+    tech_support_rag_service: TechSupportRAGService,
+):
+    """Create a tech-support node backed by FAQ RAG."""
+
+    def tech_support_rag_answer(state: SupportRouterState) -> SupportRouterState:
+        result = tech_support_rag_service.answer(state["user_query"])
+
+        return {
+            "answer": result["answer"],
+            "rag_context": result["rag_context"],
+            "rag_sources": result["rag_sources"],
+        }
+
+    return tech_support_rag_answer
 
 
 def make_billing_node(billing_service: BillingService):

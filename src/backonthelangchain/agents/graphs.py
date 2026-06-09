@@ -17,6 +17,7 @@ from backonthelangchain.agents.nodes import (
     make_router_node,
     make_safety_check_node,
     make_tech_support_node,
+    make_tech_support_rag_node,
     pick_route,
     safety_gate,
 )
@@ -29,8 +30,11 @@ from backonthelangchain.agents.services import (
     BillingService,
     OpenAIModerationSafetyService,
     RouterService,
+    TechSupportRAGService,
     TechSupportService,
 )
+from backonthelangchain.rag.pipelines import TechSupportRAGPipeline
+from backonthelangchain.rag.rerankers import VoyageReranker
 
 
 def build_support_router_graph(
@@ -38,15 +42,7 @@ def build_support_router_graph(
     model: str = "gpt-5.4-mini",
     checkpointer=None,
 ):
-    """Build the basic support-router graph.
-
-    Pattern demonstrated:
-    1. Router service asks the LLM for a structured route decision.
-    2. Conditional edge sends state to the selected specialized service.
-
-    This graph does not run a pre-router safety check. It is useful as a
-    baseline graph for tests, demos, and regression comparisons.
-    """
+    """Build the basic support-router graph without safety or RAG."""
 
     router_model = get_router_model(model=model)
     billing_model = get_billing_model(model=model)
@@ -87,17 +83,7 @@ def build_safe_support_router_graph(
     moderation_model: str = "omni-moderation-latest",
     checkpointer=None,
 ):
-    """Build a safety-gated support-router graph.
-
-    Pattern demonstrated:
-    1. Safety service checks the user query before any route-specific work.
-    2. Safety gate blocks flagged requests before the router runs.
-    3. Router service asks the LLM for a structured route decision.
-    4. Conditional edge sends state to the selected specialized service.
-
-    Services are reusable components. Nodes adapt those services to LangGraph
-    state. The graph is the orchestration recipe.
-    """
+    """Build a safety-gated support-router graph without RAG."""
 
     router_model = get_router_model(model=model)
     billing_model = get_billing_model(model=model)
@@ -118,6 +104,89 @@ def build_safe_support_router_graph(
     builder.add_node("blocked_response", blocked_response_node)
     builder.add_node("router", make_router_node(router_service))
     builder.add_node("tech_support_answer", make_tech_support_node(tech_support_service))
+    builder.add_node("billing_answer", make_billing_node(billing_service))
+
+    builder.add_edge(START, "safety_check")
+    builder.add_conditional_edges(
+        "safety_check",
+        safety_gate,
+        {
+            "router": "router",
+            "blocked_response": "blocked_response",
+        },
+    )
+    builder.add_conditional_edges(
+        "router",
+        pick_route,
+        {
+            "tech_support_answer": "tech_support_answer",
+            "billing_answer": "billing_answer",
+        },
+    )
+    builder.add_edge("blocked_response", END)
+    builder.add_edge("tech_support_answer", END)
+    builder.add_edge("billing_answer", END)
+
+    return builder.compile(checkpointer=checkpointer or MemorySaver())
+
+
+def build_safe_rag_support_router_graph(
+    *,
+    model: str = "gpt-5.4-mini",
+    moderation_model: str = "omni-moderation-latest",
+    reranker_model: str = "rerank-2.5",
+    checkpointer=None,
+):
+    """Build a safety-gated support-router graph with RAG for tech support.
+
+    Workflow:
+
+        safety_check
+            -> router
+                -> tech_support_answer with FAQ RAG
+                -> billing_answer
+            -> blocked_response
+
+    Tech support RAG flow:
+
+        FAQ chunks
+        -> OpenAI embeddings
+        -> FAISS top-10 retrieval
+        -> Voyage rerank top-5
+        -> inject context into support answer prompt
+    """
+
+    router_model = get_router_model(model=model)
+    billing_model = get_billing_model(model=model)
+    answer_model = get_chat_model(model=model, temperature=0.1)
+
+    safety_service = OpenAIModerationSafetyService(model=moderation_model)
+    router_service = RouterService(router_model)
+    billing_service = BillingService(billing_model)
+
+    rag_pipeline = TechSupportRAGPipeline(
+        reranker=VoyageReranker(model=reranker_model),
+        retrieve_top_k=10,
+        rerank_top_k=3,
+    )
+    tech_support_rag_service = TechSupportRAGService(
+        chat_model=answer_model,
+        rag_pipeline=rag_pipeline,
+    )
+
+    builder = StateGraph(
+        SupportRouterState,
+        input=SupportRouterInput,
+        output=SupportRouterOutput,
+    )
+
+    builder.add_node("safety_check", make_safety_check_node(safety_service))
+    builder.add_node("blocked_response", blocked_response_node)
+    builder.add_node("router", make_router_node(router_service))
+    builder.add_node(
+        "tech_support_answer",
+        make_tech_support_rag_node(tech_support_rag_service),
+    )
     builder.add_node("billing_answer", make_billing_node(billing_service))
 
     builder.add_edge(START, "safety_check")

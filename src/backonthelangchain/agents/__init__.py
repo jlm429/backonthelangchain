@@ -1,6 +1,7 @@
 """Agent graph builders."""
 
 from backonthelangchain.agents.graphs import (
+    build_safe_rag_support_router_graph,
     build_safe_support_router_graph,
     build_support_router_graph,
 )
@@ -8,4 +9,5 @@ from backonthelangchain.agents.graphs import (
 __all__ = [
     "build_support_router_graph",
     "build_safe_support_router_graph",
+    "build_safe_rag_support_router_graph",
 ]
