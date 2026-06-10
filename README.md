@@ -2,6 +2,10 @@
 ![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
 ![Ruff](https://img.shields.io/badge/lint-ruff-blue.svg)
 ![LangGraph](https://img.shields.io/badge/built%20with-LangGraph-black.svg)
+![OpenAI](https://img.shields.io/badge/LLM-OpenAI-412991)
+![FAISS](https://img.shields.io/badge/Vector%20Store-FAISS-orange)
+![Voyage](https://img.shields.io/badge/Reranker-Voyage-purple)
+![LangSmith](https://img.shields.io/badge/Observability-LangSmith-green)
 
 # backonthelangchain
 
