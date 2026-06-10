@@ -145,7 +145,7 @@ billing  tech_support_rag
               |
       Voyage Rerank 2.5
               |
-       Top 5 FAQ Chunks
+       Top 3 FAQ Chunks
               |
           GPT-5.4-mini
 ```
