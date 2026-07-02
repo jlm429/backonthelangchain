@@ -1,0 +1,76 @@
+# --------------------------------------------------
+# Environment Variables
+# --------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --------------------------------------------------
+# Python
+# --------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Type Checking
+.mypy_cache/
+.pyre/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDEs
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# --------------------------------------------------
+# LangSmith / Traces / Logs
+# --------------------------------------------------
+logs/
+*.log
+
+# --------------------------------------------------
+# Local Data
+# --------------------------------------------------
+data/raw/
+data/processed/
+
+# --------------------------------------------------
+# Vector Stores
+# --------------------------------------------------
+.faiss/
+chroma/
+chroma_db/
+vectorstore/
+vectorstores/
+
+# --------------------------------------------------
+# LangGraph
+# --------------------------------------------------
+.langgraph_api/
+
+# --------------------------------------------------
+# Secrets
+# --------------------------------------------------
+secrets/
+credentials.json
+service_account.json
