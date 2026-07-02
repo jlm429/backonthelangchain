@@ -93,6 +93,11 @@ Agents may inspect `.env.example` but must not inspect `.env`.
 - Do not modify application code when the request is limited to agent harness
   files such as `AGENTS.md`, `skills/`, or `scripts/`.
 
+Documentation
+
+- Keep CHANGELOG.md up to date for meaningful repository changes.
+- Record features, workflow improvements, and behavior changes—not minor edits or formatting changes.
+
 ## Dependency notes
 
 - The project uses Poetry.
