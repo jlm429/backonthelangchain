@@ -95,8 +95,11 @@ Agents may inspect `.env.example` but must not inspect `.env`.
 
 ## Documentation
 
-- Keep CHANGELOG.md up to date for meaningful repository changes.
-- Record features, workflow improvements, and behavior changes—not minor edits or formatting changes.
+- Keep `changelog.md` up to date for meaningful repository changes.
+- Record features, workflow improvements, behavior changes, and
+  documentation-only changes. Use a Documentation category for
+  documentation-only changes.
+- Do not record minor edits or formatting changes.
 
 ## Dependency notes
 
@@ -126,4 +129,3 @@ For targeted iteration, useful commands include:
 poetry run ruff check .
 poetry run pytest
 ```
-
