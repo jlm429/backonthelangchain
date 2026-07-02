@@ -90,6 +90,7 @@ Push branch
         ▼
 Open Pull Request
 ```
+</details>
 
 ## Examples
 
