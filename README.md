@@ -108,17 +108,139 @@ Open Pull Request
 <details>
 <summary><strong>Support Router</strong></summary>
 
-...
+A basic LangGraph routing workflow that sends user requests to specialized support flows.
+
+```text
+START
+  |
+router
+ /     \
+tech   billing
+```
+
+Run:
+
+```bash
+poetry run python examples/run_support_router.py
+```
+
+Or provide a custom query:
+
+```bash
+poetry run python examples/run_support_router.py \
+    "I was charged twice this month."
+```
+
+Example queries:
+
+```text
+I cannot log in after enabling MFA.
+I was charged twice this month.
+```
+
 </details>
 
 <details>
 <summary><strong>Safety-Gated Support Router</strong></summary>
 
-...
+Extends the router workflow with a pre-router safety check using OpenAI's moderation API.
+
+```text
+START
+  |
+safety_check
+  |
+  +---- blocked_response
+  |
+router
+ /     \
+tech   billing
+```
+
+Run:
+
+```bash
+poetry run python examples/run_safe_support_router.py
+```
+
+Or provide a custom query:
+
+```bash
+poetry run python examples/run_safe_support_router.py \
+    "I cannot log in after enabling MFA."
+```
+
+Example queries:
+
+```text
+I hate your support team. They are worthless idiots.
+I was charged twice this month.
+```
+
 </details>
 
 <details>
 <summary><strong>Safety-Gated Support Router with RAG</strong></summary>
 
-...
+Extends the safety-gated router with a deterministic RAG pipeline for Tier 1 technical support.
+
+Workflow:
+
+```text
+START
+  |
+safety_check
+  |
+  +---- blocked_response
+  |
+router
+ /     \
+billing  tech_support_rag
+              |
+      OpenAI Embeddings
+              |
+            FAISS
+              |
+      Top 10 Retrieval
+              |
+      Voyage Rerank 2.5
+              |
+       Top 3 FAQ Chunks
+              |
+          GPT-5.4-mini
+```
+
+The tech support route retrieves relevant FAQ content, reranks results, and injects the most relevant support articles into the response context.
+
+Run:
+
+```bash
+poetry run python examples/run_safe_rag_support_router.py
+```
+
+Or provide a custom query:
+
+```bash
+poetry run python examples/run_safe_rag_support_router.py \
+    "I need access to production because I can't open the admin page."
+```
+
+Example queries:
+
+```text
+I need access to production because I can't open the admin page.
+My reset email never showed up and now the link does not work.
+Can you give me access to the admin page?
+```
+
+Features demonstrated:
+
+- OpenAI Moderation API safety gate
+- Structured routing with LangGraph
+- OpenAI embeddings (`text-embedding-3-small`)
+- FAISS vector retrieval
+- Voyage reranking (`rerank-2.5`)
+- Context injection into support responses
+- FAQ source attribution
+
 </details>
