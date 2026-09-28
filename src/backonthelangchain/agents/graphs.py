@@ -12,8 +12,13 @@ from backonthelangchain.agents.models import (
     get_router_model,
 )
 from backonthelangchain.agents.nodes import (
+    JEV_HUMAN_ESCALATION_THRESHOLD,
+    JEV_ROUTE_CONFIDENCE_THRESHOLD,
     blocked_response_node,
+    human_escalation_node,
     make_billing_node,
+    make_jev_route_picker,
+    make_jev_router_node,
     make_router_node,
     make_safety_check_node,
     make_tech_support_node,
@@ -28,6 +33,8 @@ from backonthelangchain.agents.schemas import (
 )
 from backonthelangchain.agents.services import (
     BillingService,
+    JEV_MODEL,
+    JevSupportRouterService,
     OpenAIModerationSafetyService,
     RouterService,
     TechSupportRAGService,
@@ -59,7 +66,9 @@ def build_support_router_graph(
     )
 
     builder.add_node("router", make_router_node(router_service))
-    builder.add_node("tech_support_answer", make_tech_support_node(tech_support_service))
+    builder.add_node(
+        "tech_support_answer", make_tech_support_node(tech_support_service)
+    )
     builder.add_node("billing_answer", make_billing_node(billing_service))
 
     builder.add_edge(START, "router")
@@ -103,7 +112,9 @@ def build_safe_support_router_graph(
     builder.add_node("safety_check", make_safety_check_node(safety_service))
     builder.add_node("blocked_response", blocked_response_node)
     builder.add_node("router", make_router_node(router_service))
-    builder.add_node("tech_support_answer", make_tech_support_node(tech_support_service))
+    builder.add_node(
+        "tech_support_answer", make_tech_support_node(tech_support_service)
+    )
     builder.add_node("billing_answer", make_billing_node(billing_service))
 
     builder.add_edge(START, "safety_check")
@@ -124,6 +135,83 @@ def build_safe_support_router_graph(
         },
     )
     builder.add_edge("blocked_response", END)
+    builder.add_edge("tech_support_answer", END)
+    builder.add_edge("billing_answer", END)
+
+    return builder.compile(checkpointer=checkpointer or MemorySaver())
+
+
+def build_jev_support_router_graph(
+    *,
+    model: str = "gpt-5.4-mini",
+    moderation_model: str = "omni-moderation-latest",
+    jev_model: str = JEV_MODEL,
+    route_confidence_threshold: float = JEV_ROUTE_CONFIDENCE_THRESHOLD,
+    human_escalation_threshold: float = JEV_HUMAN_ESCALATION_THRESHOLD,
+    checkpointer=None,
+    safety_service=None,
+    jev_router_service=None,
+    fallback_router_service=None,
+    tech_support_service=None,
+    billing_service=None,
+):
+    """Build the safety-gated experimental Jev support-router graph."""
+
+    safety_service = safety_service or OpenAIModerationSafetyService(
+        model=moderation_model
+    )
+    jev_router_service = jev_router_service or JevSupportRouterService(model=jev_model)
+    fallback_router_service = fallback_router_service or RouterService(
+        get_router_model(model=model)
+    )
+    tech_support_service = tech_support_service or TechSupportService(
+        get_chat_model(model=model, temperature=0.7)
+    )
+    billing_service = billing_service or BillingService(get_billing_model(model=model))
+
+    builder = StateGraph(
+        SupportRouterState,
+        input_schema=SupportRouterInput,
+        output_schema=SupportRouterOutput,
+    )
+
+    builder.add_node("safety_check", make_safety_check_node(safety_service))
+    builder.add_node("blocked_response", blocked_response_node)
+    builder.add_node(
+        "jev_router",
+        make_jev_router_node(
+            jev_router_service,
+            fallback_router_service,
+            route_confidence_threshold=route_confidence_threshold,
+            human_escalation_threshold=human_escalation_threshold,
+        ),
+    )
+    builder.add_node("human_escalation", human_escalation_node)
+    builder.add_node(
+        "tech_support_answer", make_tech_support_node(tech_support_service)
+    )
+    builder.add_node("billing_answer", make_billing_node(billing_service))
+
+    builder.add_edge(START, "safety_check")
+    builder.add_conditional_edges(
+        "safety_check",
+        safety_gate,
+        {
+            "router": "jev_router",
+            "blocked_response": "blocked_response",
+        },
+    )
+    builder.add_conditional_edges(
+        "jev_router",
+        make_jev_route_picker(human_escalation_threshold=human_escalation_threshold),
+        {
+            "human_escalation": "human_escalation",
+            "tech_support_answer": "tech_support_answer",
+            "billing_answer": "billing_answer",
+        },
+    )
+    builder.add_edge("blocked_response", END)
+    builder.add_edge("human_escalation", END)
     builder.add_edge("tech_support_answer", END)
     builder.add_edge("billing_answer", END)
 

@@ -5,17 +5,27 @@ logic lives in services/ so it can be tested and reused outside these graphs.
 """
 
 from backonthelangchain.agents.schemas import (
+    JevRouteNodeName,
     RouteNodeName,
     SafetyGateNodeName,
     SupportRouterState,
 )
 from backonthelangchain.agents.services import (
     BillingService,
+    JevSupportRouterError,
+    JevSupportRouterService,
     OpenAIModerationSafetyService,
     RouterService,
     TechSupportRAGService,
     TechSupportService,
 )
+
+HUMAN_ESCALATION_ANSWER = (
+    "This request needs review by a human support agent. "
+    "Please contact support so an agent can assist you."
+)
+JEV_ROUTE_CONFIDENCE_THRESHOLD = 0.70
+JEV_HUMAN_ESCALATION_THRESHOLD = 0.80
 
 
 def make_safety_check_node(
@@ -68,6 +78,86 @@ def make_router_node(router_service: RouterService):
         }
 
     return router_node
+
+
+def make_jev_router_node(
+    jev_router_service: JevSupportRouterService,
+    fallback_router_service: RouterService,
+    *,
+    route_confidence_threshold: float = JEV_ROUTE_CONFIDENCE_THRESHOLD,
+    human_escalation_threshold: float = JEV_HUMAN_ESCALATION_THRESHOLD,
+):
+    """Create a Jev router that falls back when its route is uncertain."""
+
+    def fallback(user_query: str, reason: str) -> SupportRouterState:
+        decision = fallback_router_service.route(user_query)
+        return {
+            "domain": decision.domain,
+            "route_reason": f"{reason} Fallback router: {decision.reason}",
+            "jev_used_fallback": True,
+        }
+
+    def jev_router_node(state: SupportRouterState) -> SupportRouterState:
+        user_query = state["user_query"]
+
+        try:
+            result = jev_router_service.evaluate(user_query)
+        except JevSupportRouterError:
+            return fallback(user_query, "Jev routing failed.")
+
+        jev_state: SupportRouterState = {
+            "jev_model": result.model,
+            "jev_route_confidence": result.support_route_confidence,
+            "jev_route_probabilities": result.support_route_probabilities,
+            "needs_human_escalation": result.needs_human_escalation,
+            "jev_used_fallback": False,
+        }
+
+        if result.needs_human_escalation >= human_escalation_threshold:
+            return {
+                **jev_state,
+                "route_reason": "Jev requested human escalation.",
+            }
+
+        if result.support_route_confidence >= route_confidence_threshold:
+            return {
+                **jev_state,
+                "domain": result.support_route,
+                "route_reason": (
+                    "Jev selected the support route at or above the confidence "
+                    "threshold."
+                ),
+            }
+
+        return {
+            **jev_state,
+            **fallback(user_query, "Jev route confidence was below the threshold."),
+        }
+
+    return jev_router_node
+
+
+def make_jev_route_picker(
+    *, human_escalation_threshold: float = JEV_HUMAN_ESCALATION_THRESHOLD
+):
+    """Create the conditional edge function for Jev routing results."""
+
+    def pick_jev_route(state: SupportRouterState) -> JevRouteNodeName:
+        if state.get("needs_human_escalation", 0.0) >= human_escalation_threshold:
+            return "human_escalation"
+        if state.get("domain") == "tech_support":
+            return "tech_support_answer"
+        if state.get("domain") == "billing":
+            return "billing_answer"
+        raise ValueError("Jev routing did not produce a supported domain.")
+
+    return pick_jev_route
+
+
+def human_escalation_node(state: SupportRouterState) -> SupportRouterState:
+    """Return the deterministic response for human escalation."""
+
+    return {"answer": HUMAN_ESCALATION_ANSWER}
 
 
 def pick_route(state: SupportRouterState) -> RouteNodeName:

@@ -180,6 +180,53 @@ I was charged twice this month.
 </details>
 
 <details>
+<summary><strong>Jev Support Router</strong></summary>
+
+This standalone experimental workflow keeps OpenAI Moderation as the authoritative
+safety gate, then asks Jev 1.13 for two judgments in one System One request:
+whether the query needs a human agent and whether technical or billing support
+should handle it.
+
+```text
+START
+  |
+safety_check ---- blocked_response
+  |
+jev_router ------- human_escalation
+  |
+  +---- low confidence or failure ---- existing router
+  |
+tech_support / billing
+```
+
+Jev routes directly when Choice confidence is at least `0.70`. Lower-confidence
+routes and TypeSafe failures use the existing OpenAI router. An escalation
+probability of at least `0.80` returns a deterministic human-escalation response.
+
+Install the optional dependency and configure both provider keys:
+
+```bash
+poetry install -E jev
+```
+
+```text
+OPENAI_API_KEY=
+TYPESAFE_API_KEY=
+```
+
+Run:
+
+```bash
+poetry run python examples/run_jev_support_router.py \
+    "I cannot log in after enabling MFA."
+```
+
+The example pins the decision model to `jev-1.13.0` so calibrated thresholds do
+not move when a model alias changes.
+
+</details>
+
+<details>
 <summary><strong>Safety-Gated Support Router with RAG</strong></summary>
 
 Extends the safety-gated router with a deterministic RAG pipeline for Tier 1 technical support.
