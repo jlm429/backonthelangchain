@@ -11,6 +11,11 @@ from pydantic import BaseModel, Field
 
 RouteDomain = Literal["tech_support", "billing"]
 RouteNodeName = Literal["tech_support_answer", "billing_answer"]
+JevRouteNodeName = Literal[
+    "human_escalation",
+    "tech_support_answer",
+    "billing_answer",
+]
 SafetyGateNodeName = Literal["router", "blocked_response"]
 
 
@@ -29,7 +34,9 @@ class BillingResponse(BaseModel):
     """Structured response for the billing route."""
 
     summary: str = Field(description="Short summary of the user's billing issue.")
-    next_step: str = Field(description="Recommended next step for the support team or user.")
+    next_step: str = Field(
+        description="Recommended next step for the support team or user."
+    )
     urgency: Literal["low", "medium", "high"] = Field(
         description="Estimated urgency of the billing issue."
     )
@@ -52,6 +59,16 @@ class SafetyResult(BaseModel):
     reason: str = Field(description="Short explanation of the safety decision.")
 
 
+class JevSupportDecision(BaseModel):
+    """Application-owned result for Jev support-routing judgments."""
+
+    support_route: RouteDomain
+    support_route_confidence: float = Field(ge=0.0, le=1.0)
+    support_route_probabilities: dict[RouteDomain, float]
+    needs_human_escalation: float = Field(ge=0.0, le=1.0)
+    model: str
+
+
 class SupportRouterState(TypedDict, total=False):
     """Internal graph state.
 
@@ -72,6 +89,11 @@ class SupportRouterState(TypedDict, total=False):
     # Routing
     domain: RouteDomain
     route_reason: str
+    jev_model: str
+    jev_route_confidence: float
+    jev_route_probabilities: dict[RouteDomain, float]
+    needs_human_escalation: float
+    jev_used_fallback: bool
 
     # Execution
     tool_result: str

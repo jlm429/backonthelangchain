@@ -69,7 +69,7 @@ Before making changes, review:
 
 - `AGENTS.md` — repository conventions and engineering workflow
 - `skills/backonthelangchain/SKILL.md` — project-specific guidance
-- `CHANGELOG.md` — user-facing changes
+- `changelog.md`: user-facing changes
 
 Recommended workflow:
 
@@ -176,6 +176,50 @@ Example queries:
 I hate your support team. They are worthless idiots.
 I was charged twice this month.
 ```
+
+</details>
+
+<details>
+<summary><strong>Jev Support Router</strong></summary>
+
+This standalone experimental workflow keeps OpenAI Moderation as the authoritative
+safety gate, then asks Jev for two judgments in one System One request:
+whether the query needs a human agent and whether technical or billing support
+should handle it.
+
+```text
+START
+  |
+safety_check ---- blocked_response
+  |
+jev_router ------- human_escalation
+  |
+  +---- low confidence or failure ---- existing router
+  |
+tech_support / billing
+```
+
+Jev routes directly when Choice confidence is at least `0.70`. Lower-confidence
+routes and TypeSafe failures use the existing OpenAI router. An escalation
+probability of at least `0.80` returns a deterministic human-escalation response.
+
+Install the optional dependency, copy the environment template, and fill in the
+OpenAI and TypeSafe provider keys:
+
+```bash
+poetry install -E jev
+cp .env.example .env
+```
+
+Run:
+
+```bash
+poetry run python examples/run_jev_support_router.py \
+    "I cannot log in after enabling MFA."
+```
+
+The example pins the decision model to `jev-1.13.0` so calibrated thresholds do
+not move when a model alias changes.
 
 </details>
 

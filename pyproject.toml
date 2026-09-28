@@ -25,6 +25,10 @@ rag = [
     "numpy>=1.26,<2.3",
 ]
 
+jev = [
+    "typesafe-sdk",
+]
+
 notebooks = [
     "jupyter",
     "ipykernel",
