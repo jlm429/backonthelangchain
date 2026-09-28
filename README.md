@@ -69,7 +69,7 @@ Before making changes, review:
 
 - `AGENTS.md` — repository conventions and engineering workflow
 - `skills/backonthelangchain/SKILL.md` — project-specific guidance
-- `CHANGELOG.md` — user-facing changes
+- `changelog.md`: user-facing changes
 
 Recommended workflow:
 
@@ -183,7 +183,7 @@ I was charged twice this month.
 <summary><strong>Jev Support Router</strong></summary>
 
 This standalone experimental workflow keeps OpenAI Moderation as the authoritative
-safety gate, then asks Jev 1.13 for two judgments in one System One request:
+safety gate, then asks Jev for two judgments in one System One request:
 whether the query needs a human agent and whether technical or billing support
 should handle it.
 
@@ -203,15 +203,12 @@ Jev routes directly when Choice confidence is at least `0.70`. Lower-confidence
 routes and TypeSafe failures use the existing OpenAI router. An escalation
 probability of at least `0.80` returns a deterministic human-escalation response.
 
-Install the optional dependency and configure both provider keys:
+Install the optional dependency, copy the environment template, and fill in the
+OpenAI and TypeSafe provider keys:
 
 ```bash
 poetry install -E jev
-```
-
-```text
-OPENAI_API_KEY=
-TYPESAFE_API_KEY=
+cp .env.example .env
 ```
 
 Run:
