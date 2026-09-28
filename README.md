@@ -180,7 +180,7 @@ I was charged twice this month.
 </details>
 
 <details>
-<summary><strong>Jev Support Router</strong></summary>
+<summary><strong>Safety-Gated Support Router with Jev</strong></summary>
 
 This standalone experimental workflow keeps OpenAI Moderation as the authoritative
 safety gate, then asks Jev for two judgments in one System One request:
@@ -214,7 +214,7 @@ cp .env.example .env
 Run:
 
 ```bash
-poetry run python examples/run_jev_support_router.py \
+poetry run python examples/run_safe_jev_support_router.py \
     "I cannot log in after enabling MFA."
 ```
 
