@@ -153,6 +153,14 @@ def test_jev_service_makes_one_request_with_shared_named_state():
     assert result.needs_human_escalation == 0.23
 
 
+def test_jev_model_cannot_be_overridden():
+    with pytest.raises(TypeError):
+        JevSupportRouterService(client=FakeTypeSafeClient(None), model="jev-latest")
+
+    with pytest.raises(TypeError):
+        build_jev_support_router_graph(jev_model="jev-latest")
+
+
 def test_jev_service_rejects_an_unbounded_route():
     response = SimpleNamespace(
         model=JEV_MODEL,

@@ -31,7 +31,6 @@ from backonthelangchain.agents.schemas import (
 )
 from backonthelangchain.agents.services import (
     BillingService,
-    JEV_MODEL,
     JevSupportRouterService,
     OpenAIModerationSafetyService,
     RouterService,
@@ -143,7 +142,6 @@ def build_jev_support_router_graph(
     *,
     model: str = "gpt-5.4-mini",
     moderation_model: str = "omni-moderation-latest",
-    jev_model: str = JEV_MODEL,
     checkpointer=None,
     safety_service=None,
     jev_router_service=None,
@@ -156,7 +154,7 @@ def build_jev_support_router_graph(
     safety_service = safety_service or OpenAIModerationSafetyService(
         model=moderation_model
     )
-    jev_router_service = jev_router_service or JevSupportRouterService(model=jev_model)
+    jev_router_service = jev_router_service or JevSupportRouterService()
     fallback_router_service = fallback_router_service or RouterService(
         get_router_model(model=model)
     )

@@ -52,9 +52,8 @@ class JevSupportRouterError(RuntimeError):
 class JevSupportRouterService:
     """Evaluate escalation and routing in one System One request."""
 
-    def __init__(self, *, client: Any | None = None, model: str = JEV_MODEL) -> None:
+    def __init__(self, *, client: Any | None = None) -> None:
         self._client = client
-        self.model = model
 
     def evaluate(self, user_query: str) -> JevSupportDecision:
         """Return normalized judgments without exposing TypeSafe SDK objects."""
@@ -84,7 +83,7 @@ class JevSupportRouterService:
 
     def _request(self, client: Any, user_query: str) -> Any:
         return client.system_one(
-            model=self.model,
+            model=JEV_MODEL,
             state={"support_query": user_query},
             questions=JEV_SUPPORT_QUESTIONS,
         )
