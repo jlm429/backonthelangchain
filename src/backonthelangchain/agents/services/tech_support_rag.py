@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from backonthelangchain.agents.prompts import TECH_SUPPORT_PROMPT
-from backonthelangchain.rag.pipelines import TechSupportRAGPipeline
+
+if TYPE_CHECKING:
+    from backonthelangchain.rag.pipelines import TechSupportRAGPipeline
 
 
 class TechSupportRAGService:
