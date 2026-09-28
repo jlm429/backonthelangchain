@@ -83,9 +83,6 @@ def make_router_node(router_service: RouterService):
 def make_jev_router_node(
     jev_router_service: JevSupportRouterService,
     fallback_router_service: RouterService,
-    *,
-    route_confidence_threshold: float = JEV_ROUTE_CONFIDENCE_THRESHOLD,
-    human_escalation_threshold: float = JEV_HUMAN_ESCALATION_THRESHOLD,
 ):
     """Create a Jev router that falls back when its route is uncertain."""
 
@@ -114,13 +111,13 @@ def make_jev_router_node(
             "jev_used_fallback": False,
         }
 
-        if result.needs_human_escalation >= human_escalation_threshold:
+        if result.needs_human_escalation >= JEV_HUMAN_ESCALATION_THRESHOLD:
             return {
                 **jev_state,
                 "route_reason": "Jev requested human escalation.",
             }
 
-        if result.support_route_confidence >= route_confidence_threshold:
+        if result.support_route_confidence >= JEV_ROUTE_CONFIDENCE_THRESHOLD:
             return {
                 **jev_state,
                 "domain": result.support_route,
@@ -138,21 +135,16 @@ def make_jev_router_node(
     return jev_router_node
 
 
-def make_jev_route_picker(
-    *, human_escalation_threshold: float = JEV_HUMAN_ESCALATION_THRESHOLD
-):
-    """Create the conditional edge function for Jev routing results."""
+def pick_jev_route(state: SupportRouterState) -> JevRouteNodeName:
+    """Route Jev results to escalation or the selected support domain."""
 
-    def pick_jev_route(state: SupportRouterState) -> JevRouteNodeName:
-        if state.get("needs_human_escalation", 0.0) >= human_escalation_threshold:
-            return "human_escalation"
-        if state.get("domain") == "tech_support":
-            return "tech_support_answer"
-        if state.get("domain") == "billing":
-            return "billing_answer"
-        raise ValueError("Jev routing did not produce a supported domain.")
-
-    return pick_jev_route
+    if state.get("needs_human_escalation", 0.0) >= JEV_HUMAN_ESCALATION_THRESHOLD:
+        return "human_escalation"
+    if state.get("domain") == "tech_support":
+        return "tech_support_answer"
+    if state.get("domain") == "billing":
+        return "billing_answer"
+    raise ValueError("Jev routing did not produce a supported domain.")
 
 
 def human_escalation_node(state: SupportRouterState) -> SupportRouterState:

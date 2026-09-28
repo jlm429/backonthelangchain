@@ -12,17 +12,15 @@ from backonthelangchain.agents.models import (
     get_router_model,
 )
 from backonthelangchain.agents.nodes import (
-    JEV_HUMAN_ESCALATION_THRESHOLD,
-    JEV_ROUTE_CONFIDENCE_THRESHOLD,
     blocked_response_node,
     human_escalation_node,
     make_billing_node,
-    make_jev_route_picker,
     make_jev_router_node,
     make_router_node,
     make_safety_check_node,
     make_tech_support_node,
     make_tech_support_rag_node,
+    pick_jev_route,
     pick_route,
     safety_gate,
 )
@@ -146,8 +144,6 @@ def build_jev_support_router_graph(
     model: str = "gpt-5.4-mini",
     moderation_model: str = "omni-moderation-latest",
     jev_model: str = JEV_MODEL,
-    route_confidence_threshold: float = JEV_ROUTE_CONFIDENCE_THRESHOLD,
-    human_escalation_threshold: float = JEV_HUMAN_ESCALATION_THRESHOLD,
     checkpointer=None,
     safety_service=None,
     jev_router_service=None,
@@ -182,8 +178,6 @@ def build_jev_support_router_graph(
         make_jev_router_node(
             jev_router_service,
             fallback_router_service,
-            route_confidence_threshold=route_confidence_threshold,
-            human_escalation_threshold=human_escalation_threshold,
         ),
     )
     builder.add_node("human_escalation", human_escalation_node)
@@ -203,7 +197,7 @@ def build_jev_support_router_graph(
     )
     builder.add_conditional_edges(
         "jev_router",
-        make_jev_route_picker(human_escalation_threshold=human_escalation_threshold),
+        pick_jev_route,
         {
             "human_escalation": "human_escalation",
             "tech_support_answer": "tech_support_answer",
