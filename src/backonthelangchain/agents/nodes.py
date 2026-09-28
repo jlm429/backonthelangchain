@@ -94,6 +94,7 @@ def make_jev_router_node(
         return {
             "domain": decision.domain,
             "route_reason": f"{reason} Fallback router: {decision.reason}",
+            "needs_human_escalation": 0.0,
             "jev_used_fallback": True,
         }
 

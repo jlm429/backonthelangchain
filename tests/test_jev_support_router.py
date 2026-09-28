@@ -246,6 +246,35 @@ def test_jev_failure_uses_fallback_router():
     assert fallback.queries == ["cannot sign in"]
 
 
+@pytest.mark.parametrize("fallback_cause", ["failure", "low_confidence"])
+def test_fallback_clears_persisted_human_escalation(fallback_cause):
+    jev = FakeJevService(result=jev_result(escalation=0.80))
+    fallback = FakeRouterService(domain="tech_support")
+    tech = FakeTechSupportService()
+    graph = build_graph(
+        safety=FakeSafetyService(),
+        jev=jev,
+        fallback=fallback,
+        tech=tech,
+        billing=FakeBillingService(),
+    )
+    thread_id = f"persisted-escalation-{fallback_cause}"
+
+    first_response = invoke(graph, "I need a person", thread_id)
+    assert first_response["answer"] == HUMAN_ESCALATION_ANSWER
+
+    if fallback_cause == "failure":
+        jev.error = JevSupportRouterError("provider unavailable")
+    else:
+        jev.result = jev_result(confidence=0.69, escalation=0.10)
+
+    response = invoke(graph, "cannot sign in", thread_id)
+
+    assert response["answer"] == "fake technical answer"
+    assert fallback.queries == ["cannot sign in"]
+    assert tech.queries == ["cannot sign in"]
+
+
 def test_escalation_threshold_routes_to_deterministic_human_node():
     jev = FakeJevService(result=jev_result(confidence=0.10, escalation=0.80))
     fallback = FakeRouterService()
