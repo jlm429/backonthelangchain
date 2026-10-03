@@ -1,5 +1,6 @@
 import asyncio
 import json
+from collections import deque
 
 from fastapi.testclient import TestClient
 
@@ -33,19 +34,19 @@ def make_client(handler, *, settings_provider=configured_settings, limiter=None)
 
 def post_body_chunks(app, chunks: list[bytes]) -> tuple[int, dict]:
     async def invoke() -> tuple[int, dict]:
-        requests = [
+        requests = deque(
             {
                 "type": "http.request",
                 "body": chunk,
                 "more_body": index < len(chunks) - 1,
             }
             for index, chunk in enumerate(chunks)
-        ]
+        )
         responses = []
 
         async def receive():
             if requests:
-                return requests.pop(0)
+                return requests.popleft()
             return {"type": "http.disconnect"}
 
         async def send(message):
@@ -169,20 +170,33 @@ def test_oversized_request_body_is_rejected_before_validation():
     assert oversized not in response.text
 
 
-def test_oversized_chunked_request_body_is_rejected_while_streaming():
+def test_one_byte_chunks_are_coalesced_before_validation():
     registry = build_example_registry(jev_handler=successful_handler)
     app = create_app(
         registry=registry,
         settings_provider=configured_settings,
         cors_origins=("http://localhost:3000",),
     )
-    prefix = b'{"query":"'
-    chunks = [
-        prefix + b"x" * (MAX_REQUEST_BODY_BYTES - len(prefix)),
-        b'x"}',
-    ]
+    request_body = json.dumps({"query": "one byte at a time"}).encode()
 
-    status, body = post_body_chunks(app, chunks)
+    status, body = post_body_chunks(
+        app,
+        [request_body[index : index + 1] for index in range(len(request_body))],
+    )
+
+    assert status == 200
+    assert body["result"]["received_query"] == "one byte at a time"
+
+
+def test_oversized_one_byte_chunks_are_rejected_while_streaming():
+    registry = build_example_registry(jev_handler=successful_handler)
+    app = create_app(
+        registry=registry,
+        settings_provider=configured_settings,
+        cors_origins=("http://localhost:3000",),
+    )
+
+    status, body = post_body_chunks(app, [b"x"] * (MAX_REQUEST_BODY_BYTES + 1))
 
     assert status == 413
     assert body["error"]["code"] == "request_too_large"

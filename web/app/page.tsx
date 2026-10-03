@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { RoutingSource } from "./routing-source";
+
 type ExampleMetadata = {
   id: string;
   display_name: string;
@@ -339,7 +341,7 @@ export default function Home() {
                   <span className="card-kicker">Routing</span>
                   <strong>{formatLabel(result.result.routing.destination)}</strong>
                   <p>{result.result.routing.reason}</p>
-                  <small>{result.result.routing.used_fallback ? "OpenAI fallback used" : "Jev route used"}</small>
+                  <RoutingSource routing={result.result.routing} />
                 </section>
               </div>
 
