@@ -197,6 +197,28 @@ def test_moderation_blocks_before_jev_runs():
     assert fallback.queries == []
 
 
+def test_moderation_block_clears_a_persisted_jev_decision():
+    safety = FakeSafetyService()
+    jev = FakeJevService(result=jev_result())
+    graph = build_graph(
+        safety=safety,
+        jev=jev,
+        fallback=FakeRouterService(),
+        tech=FakeTechSupportService(),
+        billing=FakeBillingService(),
+    )
+    thread_id = "moderation-clears-jev"
+
+    first_response = invoke(graph, "login error", thread_id)
+    assert first_response["jev_decision_available"] is True
+
+    safety.is_safe = False
+    response = invoke(graph, "blocked query", thread_id)
+
+    assert response["answer"].startswith("I cannot assist")
+    assert response["jev_decision_available"] is False
+
+
 def test_high_confidence_jev_choice_routes_without_fallback():
     jev = FakeJevService(result=jev_result(route="tech_support", confidence=0.70))
     fallback = FakeRouterService(domain="billing")
@@ -218,7 +240,7 @@ def test_high_confidence_jev_choice_routes_without_fallback():
 
 
 def test_low_confidence_jev_choice_uses_fallback_router():
-    jev = FakeJevService(result=jev_result(confidence=0.69))
+    jev = FakeJevService(result=jev_result(confidence=0.69, escalation=0.40))
     fallback = FakeRouterService(domain="billing")
     billing = FakeBillingService()
     graph = build_graph(
@@ -232,6 +254,9 @@ def test_low_confidence_jev_choice_uses_fallback_router():
     response = invoke(graph, "ambiguous request", "low-confidence-fallback")
 
     assert response["answer"]["summary"] == "fake billing summary"
+    assert response["needs_human_escalation"] == 0.0
+    assert response["jev_human_escalation_probability"] == 0.40
+    assert response["jev_decision_available"] is True
     assert fallback.queries == ["ambiguous request"]
     assert billing.queries == ["ambiguous request"]
 
@@ -251,6 +276,7 @@ def test_jev_failure_uses_fallback_router():
     response = invoke(graph, "cannot sign in", "jev-failure-fallback")
 
     assert response["answer"] == "fake technical answer"
+    assert response["jev_decision_available"] is False
     assert fallback.queries == ["cannot sign in"]
 
 

@@ -4,15 +4,18 @@ version = "0.1.0"
 description = "Personal sandbox for RAG, agents, and LangGraph patterns."
 requires-python = ">=3.10,<3.14"
 dependencies = [
+    "fastapi",
     "langchain-core",
     "langchain-openai",
     "langgraph",
     "python-dotenv",
     "pydantic",
+    "uvicorn",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "httpx",
     "pytest",
     "ruff",
 ]
