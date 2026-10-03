@@ -12,7 +12,7 @@ Required environment variables:
 import sys
 from pprint import pprint
 
-from backonthelangchain.agents import build_jev_support_router_graph
+from backonthelangchain.examples.jev_support import run_jev_support_router
 from backonthelangchain.utils.env import load_project_env
 
 
@@ -24,14 +24,10 @@ def main() -> None:
     else:
         query = input("User query> ").strip()
 
-    graph = build_jev_support_router_graph()
-    response = graph.invoke(
-        {"user_query": query},
-        config={"configurable": {"thread_id": "jev-support-router-demo"}},
-    )
+    response = run_jev_support_router(query)
 
-    print("\nAnswer:")
-    pprint(response["answer"])
+    print("\nResult:")
+    pprint(response.model_dump(mode="json"))
 
 
 if __name__ == "__main__":

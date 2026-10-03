@@ -106,7 +106,18 @@ class SupportRouterInput(TypedDict):
     user_query: str
 
 
-class SupportRouterOutput(TypedDict):
-    """Public graph output schema."""
+class SupportRouterOutput(TypedDict, total=False):
+    """Public graph output schema shared by CLI and API adapters."""
 
     answer: Union[str, dict]
+    is_safe: bool
+    moderation_flagged: bool
+    moderation_model: str
+    safety_reason: str
+    domain: RouteDomain
+    route_reason: str
+    jev_model: str
+    jev_route_confidence: float
+    jev_route_probabilities: dict[RouteDomain, float]
+    needs_human_escalation: float
+    jev_used_fallback: bool

@@ -21,6 +21,9 @@ env/
 build/
 dist/
 *.egg-info/
+web/.next/
+web/node_modules/
+web/*.tsbuildinfo
 
 # Testing
 .pytest_cache/

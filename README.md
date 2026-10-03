@@ -1,290 +1,190 @@
 ![Python](https://img.shields.io/badge/python-3.10%20to%203.13-blue.svg)
-![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)
-![Package Manager: Poetry](https://img.shields.io/badge/package%20manager-Poetry-60A5FA.svg)
-![Tests: pytest](https://img.shields.io/badge/tests-pytest-0A9EDC.svg)
-![Lint: Ruff](https://img.shields.io/badge/lint-Ruff-261230.svg)
-![Workflow: LangGraph](https://img.shields.io/badge/workflows-LangGraph-black.svg)
-![Provider: OpenAI](https://img.shields.io/badge/provider-OpenAI-412991.svg)
-![RAG: FAISS](https://img.shields.io/badge/RAG-FAISS-orange.svg)
-![Optional: Voyage](https://img.shields.io/badge/optional-Voyage-purple.svg)
-![Optional: LangSmith](https://img.shields.io/badge/optional-LangSmith-green.svg)
+![Next.js](https://img.shields.io/badge/frontend-Next.js-black.svg)
+![FastAPI](https://img.shields.io/badge/backend-FastAPI-05998B.svg)
+![Workflow](https://img.shields.io/badge/workflows-LangGraph-1B1B1B.svg)
 
 # backonthelangchain
 
-Building, evaluating, and refining LLM-powered systems while demonstrating modern agent-assisted software engineering practices.
+An interactive workshop for production-minded LLM application patterns. The web
+application lets you choose an example from a backend catalog, run a query, and
+inspect normalized safety, escalation, routing, and response data.
 
-Modern AI applications combine software engineering discipline, agentic workflow patterns, evaluation, and tooling to produce reliable systems. This repository explores both the implementation of AI applications and the engineering workflows used to build them.
+The first registered workflow is the Jev support router. OpenAI Moderation is
+the authoritative first gate. Safe requests continue to the existing fixed Jev
+`jev-1.13.0` decision service, then human escalation or support routing. Low
+confidence Jev decisions and Jev failures use the existing OpenAI router.
 
-## Installation
+## Architecture
 
-<details>
-<summary><strong>Core Installation</strong></summary>
-
-Clone the repository and install dependencies using Poetry:
-
-```bash
-git clone https://github.com/jlm429/backonthelangchain.git
-cd backonthelangchain
-
-poetry install
+```text
+Browser
+  |
+  | same-origin /backend requests
+  v
+Next.js web server
+  |
+  | server-side rewrite
+  v
+FastAPI example registry
+  |
+  | async handler contract, blocking work moved to a worker thread
+  v
+Reusable Python Jev runner
+  |
+  v
+Existing LangGraph workflow
+  |
+  +-- OpenAI Moderation
+  +-- Jev escalation and route decision
+  +-- human escalation, tech support, or billing
 ```
 
-Create a local `.env` file:
+The Python runner in
+`src/backonthelangchain/examples/jev_support.py` is shared by FastAPI and
+`examples/run_safe_jev_support_router.py`. FastAPI never shells out to Python or
+Poetry. The catalog in `src/backonthelangchain/examples/registry.py` is the only
+example list. The frontend always fetches its selector, descriptions, defaults,
+and samples from that catalog.
+
+## Local setup
+
+Requirements:
+
+- Python 3.10 through 3.13
+- Poetry
+- Node.js 20.9 or newer
+- npm
+
+Install the Python application, test tools, and Jev integration:
 
 ```bash
-OPENAI_API_KEY=your_api_key
-
-# Optional
-LANGSMITH_API_KEY=your_langsmith_key
+poetry install -E dev -E jev
 ```
 
-</details>
+Create a local environment file from the committed template:
 
-<details>
-<summary><strong>Optional RAG Dependencies</strong></summary>
+```bash
+cp .env.example .env
+```
 
-Install the additional dependencies required for the RAG examples:
+Set these required values locally:
+
+```text
+OPENAI_API_KEY
+TYPESAFE_API_KEY
+```
+
+Never commit the populated file. Start the backend from the repository root:
+
+```bash
+poetry run uvicorn backonthelangchain.api.app:app \
+  --env-file .env --reload --host 127.0.0.1 --port 8000
+```
+
+In a second terminal, install and start the frontend:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`. The Next.js server proxies browser requests to
+`http://127.0.0.1:8000` by default. To use another backend address, set the
+server-only `BACKEND_API_URL` before starting or building Next.js. It is not a
+browser secret and is not prefixed with `NEXT_PUBLIC_`.
+
+The reusable CLI adapter remains available:
+
+```bash
+poetry run python examples/run_safe_jev_support_router.py \
+  "I cannot log in after enabling MFA."
+```
+
+## API
+
+- `GET /api/examples` returns browser-safe registry metadata.
+- `POST /api/examples/{id}/run` accepts `{ "query": "..." }` and returns a
+  normalized result.
+
+Queries must contain non-whitespace text and are limited to 2,000 characters.
+The API returns stable error codes and generic messages. It never returns raw
+provider errors, credentials, headers, stack traces, or configuration values.
+
+## Security model
+
+Provider calls and both required API keys stay in Python. Keys are read only
+from server environment variables and are never included in catalog metadata,
+application logs, browser bundles, `NEXT_PUBLIC_` variables, or API responses.
+Real `.env` files remain ignored. `.env.example` contains variable names only.
+
+The initial API also provides:
+
+- OpenAI Moderation before Jev or support routing
+- exact-origin CORS with local development origins by default
+- a 2,000-character query limit
+- a 16 KiB request body limit when `Content-Length` is provided
+- ten runs per client IP per minute
+- a bounded in-process limiter that tracks at most 10,000 clients
+- no-store and basic browser hardening headers
+- safe request-validation and provider-failure responses
+
+Set `BACKONTHELANGCHAIN_CORS_ORIGINS` to a comma-separated list of exact origins
+when the frontend is hosted separately. A wildcard production origin is not
+enabled.
+
+The limiter is intentionally suitable only for this single-instance slice.
+Before public deployment, add authentication or user-scoped quotas, a shared
+rate limiter, strict streaming request-body limits at the reverse proxy, HTTPS,
+a restrictive network policy, abuse monitoring, and alerting.
+Multiple API processes do not share the current in-memory counters.
+
+## Add an example
+
+1. Put provider and business logic in a reusable Python service under `src/`.
+2. Expose one async handler that accepts a query and returns a JSON-compatible
+   dictionary. Move blocking SDK calls to `asyncio.to_thread` when needed.
+3. Create an `ExampleDefinition` in `build_example_registry` with its id,
+   display name, description, default prompt, samples, handler, and required
+   configuration variable names.
+4. Add fake-provider tests for the service and API path. Tests must never make
+   paid provider calls.
+
+The frontend needs no new example list or selector code. It renders metadata
+from the backend registry and displays the normalized result plus raw JSON.
+
+The next straightforward additions are the existing safety-gated support
+router, followed by the basic support router. The RAG support router is also a
+good fit after its larger FAISS and Voyage dependency footprint is made an
+explicit runtime option.
+
+## Validation
+
+Run the Python checks:
+
+```bash
+./scripts/check.sh
+```
+
+Run the frontend checks:
+
+```bash
+cd web
+npm run lint
+npm run typecheck
+npm run build
+npm audit
+```
+
+All provider tests use injected fakes. No local credentials are required for
+the test suite.
+
+## Other Python examples
+
+The existing focused teaching scripts remain under `examples/`, including the
+basic support router, safety-gated router, and RAG support router. Optional RAG
+dependencies can be installed with:
 
 ```bash
 poetry install -E rag
 ```
-
-Required environment variables:
-
-```bash
-OPENAI_API_KEY=your_api_key
-VOYAGE_API_KEY=your_voyage_api_key
-```
-
-</details>
-
-## Agent-Assisted Development
-
-<details>
-<summary><strong>Developing with Coding Agents</strong></summary>
-
-This repository is designed for development with modern coding agents, including Codex, Claude Code, Gemini CLI, and future agent-based tools.
-
-Before making changes, review:
-
-- `AGENTS.md` — repository conventions and engineering workflow
-- `skills/backonthelangchain/SKILL.md` — project-specific guidance
-- `changelog.md`: user-facing changes
-
-Recommended workflow:
-
-```text
-Create feature branch
-        │
-        ▼
-Read AGENTS.md and repository Skill
-        │
-        ▼
-Implement changes
-        │
-        ▼
-Run ./scripts/check.sh
-        │
-        ▼
-Update docs / CHANGELOG (if needed)
-        │
-        ▼
-Commit changes
-        │
-        ▼
-(Optional) Validate with no-mistakes
-        │
-        ▼
-Push branch
-        │
-        ▼
-Open Pull Request
-```
-
-</details>
-
-## Examples
-
-<details>
-<summary><strong>Support Router</strong></summary>
-
-A basic LangGraph routing workflow that sends user requests to specialized support flows.
-
-```text
-START
-  |
-router
- /     \
-tech   billing
-```
-
-Run:
-
-```bash
-poetry run python examples/run_support_router.py
-```
-
-Or provide a custom query:
-
-```bash
-poetry run python examples/run_support_router.py \
-    "I was charged twice this month."
-```
-
-Example queries:
-
-```text
-I cannot log in after enabling MFA.
-I was charged twice this month.
-```
-
-</details>
-
-<details>
-<summary><strong>Safety-Gated Support Router</strong></summary>
-
-Extends the router workflow with a pre-router safety check using OpenAI's moderation API.
-
-```text
-START
-  |
-safety_check
-  |
-  +---- blocked_response
-  |
-router
- /     \
-tech   billing
-```
-
-Run:
-
-```bash
-poetry run python examples/run_safe_support_router.py
-```
-
-Or provide a custom query:
-
-```bash
-poetry run python examples/run_safe_support_router.py \
-    "I cannot log in after enabling MFA."
-```
-
-Example queries:
-
-```text
-I hate your support team. They are worthless idiots.
-I was charged twice this month.
-```
-
-</details>
-
-<details>
-<summary><strong>Safety-Gated Support Router with Jev</strong></summary>
-
-This standalone experimental workflow keeps OpenAI Moderation as the authoritative
-safety gate, then asks Jev for two judgments in one System One request:
-whether the query needs a human agent and whether technical or billing support
-should handle it.
-
-```text
-START
-  |
-safety_check ---- blocked_response
-  |
-jev_router ------- human_escalation
-  |
-  +---- low confidence or failure ---- existing router
-  |
-tech_support / billing
-```
-
-Jev routes directly when Choice confidence is at least `0.70`. Lower-confidence
-routes and TypeSafe failures use the existing OpenAI router. An escalation
-probability of at least `0.80` returns a deterministic human-escalation response.
-
-Install the optional dependency, copy the environment template, and fill in the
-OpenAI and TypeSafe provider keys:
-
-```bash
-poetry install -E jev
-cp .env.example .env
-```
-
-Run:
-
-```bash
-poetry run python examples/run_safe_jev_support_router.py \
-    "I cannot log in after enabling MFA."
-```
-
-The example pins the decision model to `jev-1.13.0` so calibrated thresholds do
-not move when a model alias changes.
-
-</details>
-
-<details>
-<summary><strong>Safety-Gated Support Router with RAG</strong></summary>
-
-Extends the safety-gated router with a deterministic RAG pipeline for Tier 1 technical support.
-
-Workflow:
-
-```text
-START
-  |
-safety_check
-  |
-  +---- blocked_response
-  |
-router
- /     \
-billing  tech_support_rag
-              |
-      OpenAI Embeddings
-              |
-            FAISS
-              |
-      Top 10 Retrieval
-              |
-      Voyage Rerank 2.5
-              |
-       Top 3 FAQ Chunks
-              |
-          GPT-5.4-mini
-```
-
-The tech support route retrieves relevant FAQ content, reranks results, and injects the most relevant support articles into the response context.
-
-Run:
-
-```bash
-poetry run python examples/run_safe_rag_support_router.py
-```
-
-Or provide a custom query:
-
-```bash
-poetry run python examples/run_safe_rag_support_router.py \
-    "I need access to production because I can't open the admin page."
-```
-
-Example queries:
-
-```text
-I need access to production because I can't open the admin page.
-My reset email never showed up and now the link does not work.
-Can you give me access to the admin page?
-```
-
-Features demonstrated:
-
-- OpenAI Moderation API safety gate
-- Structured routing with LangGraph
-- OpenAI embeddings (`text-embedding-3-small`)
-- FAISS vector retrieval
-- Voyage reranking (`rerank-2.5`)
-- Context injection into support responses
-- FAQ source attribution
-
-</details>
