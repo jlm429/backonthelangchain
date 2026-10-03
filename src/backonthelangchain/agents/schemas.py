@@ -92,6 +92,8 @@ class SupportRouterState(TypedDict, total=False):
     jev_model: str
     jev_route_confidence: float
     jev_route_probabilities: dict[RouteDomain, float]
+    jev_human_escalation_probability: float
+    jev_decision_available: bool
     needs_human_escalation: float
     jev_used_fallback: bool
 
@@ -119,5 +121,7 @@ class SupportRouterOutput(TypedDict, total=False):
     jev_model: str
     jev_route_confidence: float
     jev_route_probabilities: dict[RouteDomain, float]
+    jev_human_escalation_probability: float
+    jev_decision_available: bool
     needs_human_escalation: float
     jev_used_fallback: bool

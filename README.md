@@ -123,7 +123,7 @@ The initial API also provides:
 - OpenAI Moderation before Jev or support routing
 - exact-origin CORS with local development origins by default
 - a 2,000-character query limit
-- a 16 KiB request body limit when `Content-Length` is provided
+- a 16 KiB request body limit enforced while streaming, including chunked requests
 - ten runs per client IP per minute
 - a bounded in-process limiter that tracks at most 10,000 clients
 - no-store and basic browser hardening headers
@@ -135,7 +135,7 @@ enabled.
 
 The limiter is intentionally suitable only for this single-instance slice.
 Before public deployment, add authentication or user-scoped quotas, a shared
-rate limiter, strict streaming request-body limits at the reverse proxy, HTTPS,
+rate limiter, a matching reverse-proxy body limit, HTTPS,
 a restrictive network policy, abuse monitoring, and alerting.
 Multiple API processes do not share the current in-memory counters.
 

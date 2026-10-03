@@ -1,8 +1,12 @@
+import asyncio
+import json
+
 from fastapi.testclient import TestClient
 
 from backonthelangchain.api.app import create_app
 from backonthelangchain.api.config import AppSettings
 from backonthelangchain.api.rate_limit import InMemoryRateLimiter
+from backonthelangchain.api.schemas import MAX_REQUEST_BODY_BYTES
 from backonthelangchain.examples.registry import build_example_registry
 
 OPENAI_SENTINEL = "openai-test-secret-never-return"
@@ -25,6 +29,62 @@ def make_client(handler, *, settings_provider=configured_settings, limiter=None)
         cors_origins=("http://localhost:3000",),
     )
     return TestClient(app)
+
+
+def post_body_chunks(app, chunks: list[bytes]) -> tuple[int, dict]:
+    async def invoke() -> tuple[int, dict]:
+        requests = [
+            {
+                "type": "http.request",
+                "body": chunk,
+                "more_body": index < len(chunks) - 1,
+            }
+            for index, chunk in enumerate(chunks)
+        ]
+        responses = []
+
+        async def receive():
+            if requests:
+                return requests.pop(0)
+            return {"type": "http.disconnect"}
+
+        async def send(message):
+            responses.append(message)
+
+        await app(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": "POST",
+                "scheme": "http",
+                "path": "/api/examples/jev-support-router/run",
+                "raw_path": b"/api/examples/jev-support-router/run",
+                "query_string": b"",
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"transfer-encoding", b"chunked"),
+                ],
+                "client": ("testclient", 50000),
+                "server": ("testserver", 80),
+                "root_path": "",
+            },
+            receive,
+            send,
+        )
+        start = next(
+            message
+            for message in responses
+            if message["type"] == "http.response.start"
+        )
+        body = b"".join(
+            message.get("body", b"")
+            for message in responses
+            if message["type"] == "http.response.body"
+        )
+        return start["status"], json.loads(body)
+
+    return asyncio.run(invoke())
 
 
 async def successful_handler(query: str) -> dict:
@@ -107,6 +167,25 @@ def test_oversized_request_body_is_rejected_before_validation():
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "request_too_large"
     assert oversized not in response.text
+
+
+def test_oversized_chunked_request_body_is_rejected_while_streaming():
+    registry = build_example_registry(jev_handler=successful_handler)
+    app = create_app(
+        registry=registry,
+        settings_provider=configured_settings,
+        cors_origins=("http://localhost:3000",),
+    )
+    prefix = b'{"query":"'
+    chunks = [
+        prefix + b"x" * (MAX_REQUEST_BODY_BYTES - len(prefix)),
+        b'x"}',
+    ]
+
+    status, body = post_body_chunks(app, chunks)
+
+    assert status == 413
+    assert body["error"]["code"] == "request_too_large"
 
 
 def test_missing_configuration_stops_before_handler_runs():

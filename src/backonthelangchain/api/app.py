@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -23,6 +24,61 @@ from backonthelangchain.api.schemas import (
 from backonthelangchain.examples.registry import ExampleRegistry, build_example_registry
 
 SettingsProvider = Callable[[], AppSettings]
+
+
+class RequestBodyLimitMiddleware:
+    """Reject request bodies that exceed a byte limit while streaming."""
+
+    def __init__(self, app: Any, *, max_body_bytes: int) -> None:
+        self.app = app
+        self.max_body_bytes = max_body_bytes
+
+    async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", ()))
+        content_length = headers.get(b"content-length")
+        if content_length is not None:
+            try:
+                declared_size = int(content_length)
+            except ValueError:
+                declared_size = self.max_body_bytes + 1
+            if declared_size < 0 or declared_size > self.max_body_bytes:
+                await self._send_too_large(scope, receive, send)
+                return
+
+        received_size = 0
+        messages = []
+        while True:
+            message = await receive()
+            if message["type"] == "http.request":
+                received_size += len(message.get("body", b""))
+                if received_size > self.max_body_bytes:
+                    await self._send_too_large(scope, receive, send)
+                    return
+            messages.append(message)
+            if message["type"] == "http.disconnect" or not message.get(
+                "more_body", False
+            ):
+                break
+
+        async def replay_receive() -> dict:
+            if messages:
+                return messages.pop(0)
+            return await receive()
+
+        await self.app(scope, replay_receive, send)
+
+    @staticmethod
+    async def _send_too_large(scope: dict, receive: Any, send: Any) -> None:
+        response = error_response(
+            413,
+            "request_too_large",
+            "The request body is too large.",
+        )
+        await response(scope, receive, send)
 
 
 def error_response(status_code: int, code: str, message: str) -> JSONResponse:
@@ -59,6 +115,10 @@ def create_app(
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
     )
+    app.add_middleware(
+        RequestBodyLimitMiddleware,
+        max_body_bytes=MAX_REQUEST_BODY_BYTES,
+    )
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
@@ -84,22 +144,7 @@ def create_app(
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
-        content_length = request.headers.get("content-length")
-        if content_length is not None:
-            try:
-                body_size = int(content_length)
-            except ValueError:
-                body_size = MAX_REQUEST_BODY_BYTES + 1
-            if body_size > MAX_REQUEST_BODY_BYTES:
-                response = error_response(
-                    413,
-                    "request_too_large",
-                    "The request body is too large.",
-                )
-            else:
-                response = await call_next(request)
-        else:
-            response = await call_next(request)
+        response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"

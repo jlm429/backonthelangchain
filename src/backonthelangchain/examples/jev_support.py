@@ -86,21 +86,15 @@ def run_jev_support_router(
         outcome = "completed"
         destination = state["domain"]
 
-    has_jev_result = any(
-        key in state
-        for key in (
-            "jev_model",
-            "jev_route_confidence",
-            "needs_human_escalation",
-        )
-    )
     jev = None
-    if has_jev_result:
+    if state.get("jev_decision_available", False):
         jev = JevDecisionSummary(
             model=state.get("jev_model"),
             route_confidence=state.get("jev_route_confidence"),
             route_probabilities=state.get("jev_route_probabilities", {}),
-            human_escalation_probability=escalation,
+            human_escalation_probability=state.get(
+                "jev_human_escalation_probability"
+            ),
         )
 
     return JevSupportResult(

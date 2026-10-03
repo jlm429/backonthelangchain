@@ -5,18 +5,20 @@
 ### Features
 
 - Added a Next.js and TypeScript interface backed by a FastAPI example registry.
-- Added structured browser results for the existing safety-gated Jev support
-  router and shared its reusable Python runner between the API and CLI.
+- Added structured browser results that preserve Jev provider observations
+  separately from fallback routing controls, and shared the reusable Python
+  runner between the API and CLI.
 - Added bounded request rate limiting, exact-origin CORS, server-side
-  configuration validation, query limits, and safe API error envelopes.
+  configuration validation, query and streaming request-body limits, and safe
+  API error envelopes.
 - Added a standalone, safety-gated Jev support-router example with confidence-based
   fallback to the existing router and deterministic human escalation.
 
 ### Tests
 
-- Added fake-provider coverage for registry behavior, request validation, Jev
-  execution, invalid ids, missing configuration, rate limiting, and secret-safe
-  provider failures.
+- Added fake-provider coverage for registry behavior, request validation,
+  chunked request limits, Jev execution and fallback output, invalid ids,
+  missing configuration, rate limiting, and secret-safe provider failures.
 
 ### Documentation
 

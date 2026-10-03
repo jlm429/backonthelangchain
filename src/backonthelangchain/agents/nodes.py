@@ -42,6 +42,7 @@ def make_safety_check_node(
             "moderation_categories": result.categories,
             "moderation_category_scores": result.category_scores,
             "safety_reason": result.reason,
+            "jev_decision_available": False,
         }
 
     return safety_check_node
@@ -101,12 +102,17 @@ def make_jev_router_node(
         try:
             result = jev_router_service.evaluate(user_query)
         except JevSupportRouterError:
-            return fallback(user_query, "Jev routing failed.")
+            return {
+                **fallback(user_query, "Jev routing failed."),
+                "jev_decision_available": False,
+            }
 
         jev_state: SupportRouterState = {
             "jev_model": result.model,
             "jev_route_confidence": result.support_route_confidence,
             "jev_route_probabilities": result.support_route_probabilities,
+            "jev_human_escalation_probability": result.needs_human_escalation,
+            "jev_decision_available": True,
             "needs_human_escalation": result.needs_human_escalation,
             "jev_used_fallback": False,
         }
