@@ -37,10 +37,6 @@ from backonthelangchain.agents.services import (
     TechSupportRAGService,
     TechSupportService,
 )
-from backonthelangchain.rag.pipelines import TechSupportRAGPipeline
-from backonthelangchain.rag.rerankers import VoyageReranker
-
-
 def build_support_router_graph(
     *,
     model: str = "gpt-5.4-mini",
@@ -235,6 +231,9 @@ def build_safe_rag_support_router_graph(
         -> Voyage rerank top-5
         -> inject context into support answer prompt
     """
+
+    from backonthelangchain.rag.pipelines import TechSupportRAGPipeline
+    from backonthelangchain.rag.rerankers import VoyageReranker
 
     router_model = get_router_model(model=model)
     billing_model = get_billing_model(model=model)

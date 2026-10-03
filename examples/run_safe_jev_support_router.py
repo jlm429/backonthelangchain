@@ -1,8 +1,8 @@
 """Run the safety-gated experimental Jev support router.
 
 Usage:
-    poetry run python examples/run_jev_support_router.py
-    poetry run python examples/run_jev_support_router.py "I was charged twice"
+    poetry run python examples/run_safe_jev_support_router.py
+    poetry run python examples/run_safe_jev_support_router.py "I was charged twice"
 
 Required environment variables:
     OPENAI_API_KEY
