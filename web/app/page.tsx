@@ -393,6 +393,7 @@ export default function Home() {
   function updateStatus(system: SystemName, level: StatusLevel) {
     setStatuses((current) => ({ ...current, [system]: level }));
     setResult(null);
+    setExecutions(graph ? initialNodeExecutions(graph) : {});
   }
 
   function chooseSample(sample: string) {

@@ -328,6 +328,7 @@ def test_reported_only_outage_is_distinct_from_corroborating_state():
     "query",
     [
         "Checkout is not down",
+        "Checkout is no longer down",
         "There is no checkout outage",
         "Checkout isn't unavailable",
     ],
@@ -369,6 +370,8 @@ def test_outage_evidence_is_associated_with_its_component_clause():
     [
         ("Billing is operational and checkout is down", ["checkout"]),
         ("Authentication and checkout are down", ["authentication", "checkout"]),
+        ("An outage affects checkout and billing", ["billing", "checkout"]),
+        ("I can't log in to view my invoice", ["authentication"]),
         ("I can't request a payment refund", ["billing"]),
     ],
 )

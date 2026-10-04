@@ -28,43 +28,62 @@ OUTAGE_MARKERS = (
     "unable",
 )
 CLAUSE_BOUNDARY = re.compile(r"[.!?;]+|\b(?:but|while|whereas)\b")
-PHRASE_BOUNDARY = re.compile(r",+|\band\b")
-HEALTHY_MARKERS = (
-    "available",
-    "fine",
-    "healthy",
-    "normal",
-    "ok",
-    "okay",
-    "operational",
-    "up",
-)
+COMPONENT_CONNECTOR = re.compile(r"\s*(?:(?:,|\band\b|\bor\b)\s*)+")
 
 
-def _contains_phrase(text: str, phrase: str) -> bool:
-    return re.search(rf"\b{re.escape(phrase)}\b", text) is not None
-
-
-def _contains_affirmative_outage_marker(text: str, marker: str) -> bool:
-    for match in re.finditer(rf"\b{re.escape(marker)}\b", text):
-        prefix = text[: match.start()]
-        if not re.search(
+def _is_negated(text: str, marker_start: int) -> bool:
+    return bool(
+        re.search(
             (
                 r"(?:\bno|\bnot|\bnever|\bwithout|\bisn't|\bisnt)\s+"
                 r"(?:(?:an?|the)\s+)?(?:[\w'-]+\s+){0,2}$"
             ),
-            prefix,
-        ):
-            return True
-    return False
+            text[:marker_start],
+        )
+    )
 
 
-def _mentioned_systems(text: str) -> set[SystemName]:
-    return {
-        system
+def _affirmative_marker_spans(text: str) -> list[tuple[int, int]]:
+    spans = []
+    for marker in OUTAGE_MARKERS:
+        for match in re.finditer(rf"\b{re.escape(marker)}\b", text):
+            if not _is_negated(text, match.start()):
+                spans.append(match.span())
+    return sorted(set(spans))
+
+
+def _component_groups(text: str) -> list[tuple[int, int, set[SystemName]]]:
+    mentions = sorted(
+        (
+            match.start(),
+            match.end(),
+            system,
+        )
         for system, aliases in SYSTEM_ALIASES.items()
-        if any(_contains_phrase(text, alias) for alias in aliases)
-    }
+        for alias in aliases
+        for match in re.finditer(rf"\b{re.escape(alias)}\b", text)
+    )
+    groups: list[tuple[int, int, set[SystemName]]] = []
+    for start, end, system in mentions:
+        if groups and COMPONENT_CONNECTOR.fullmatch(text[groups[-1][1] : start]):
+            group_start, _, systems = groups[-1]
+            groups[-1] = (group_start, end, systems | {system})
+        else:
+            groups.append((start, end, {system}))
+    return groups
+
+
+def _distance(
+    marker: tuple[int, int],
+    group: tuple[int, int, set[SystemName]],
+) -> int:
+    marker_start, marker_end = marker
+    group_start, group_end, _ = group
+    if marker_end <= group_start:
+        return group_start - marker_end
+    if group_end <= marker_start:
+        return marker_start - group_end
+    return 0
 
 
 def build_simulated_status_evidence(
@@ -76,30 +95,13 @@ def build_simulated_status_evidence(
     reported_systems: set[SystemName] = set()
     unspecified_report = False
     for clause in CLAUSE_BOUNDARY.split(normalized_query):
-        pending_systems: set[SystemName] = set()
-        for phrase in PHRASE_BOUNDARY.split(clause):
-            phrase_systems = _mentioned_systems(phrase)
-            has_affirmative_marker = any(
-                _contains_affirmative_outage_marker(phrase, marker)
-                for marker in OUTAGE_MARKERS
-            )
-            if has_affirmative_marker:
-                associated_systems = pending_systems | phrase_systems
-                if associated_systems:
-                    reported_systems.update(associated_systems)
-                else:
-                    unspecified_report = True
-                pending_systems.clear()
+        groups = _component_groups(clause)
+        for marker in _affirmative_marker_spans(clause):
+            if not groups:
+                unspecified_report = True
                 continue
-
-            has_status_language = any(
-                _contains_phrase(phrase, marker)
-                for marker in (*OUTAGE_MARKERS, *HEALTHY_MARKERS)
-            )
-            if phrase_systems and not has_status_language:
-                pending_systems.update(phrase_systems)
-            else:
-                pending_systems.clear()
+            nearest_group = min(groups, key=lambda group: _distance(marker, group))
+            reported_systems.update(nearest_group[2])
 
     reports: list[dict[str, Any]] = []
     if unspecified_report and not reported_systems:

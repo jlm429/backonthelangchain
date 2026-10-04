@@ -69,6 +69,10 @@ test("applies actual node lifecycle events", () => {
     output: { is_safe: true },
   });
   assert.equal(completed.faq_retrieval.status, "disabled");
+
+  const reset = initialNodeExecutions(graph);
+  assert.deepEqual(reset.safety_check, { status: "waiting" });
+  assert.equal("output" in reset.safety_check, false);
 });
 
 test("parses complete SSE frames and preserves partial data", () => {
