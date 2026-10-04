@@ -20,12 +20,19 @@ readers understand practical patterns they can adapt.
 
 - `src/backonthelangchain/agents/` contains LangGraph routing, nodes, prompts,
   tool definitions, schemas, and service adapters.
+- `src/backonthelangchain/api/` contains FastAPI routes, request schemas,
+  configuration, and rate limiting.
+- `src/backonthelangchain/examples/` contains reusable adapters shared by
+  runnable scripts and compatibility API routes.
 - `src/backonthelangchain/rag/` contains loading, chunking, embedding,
   retrieval, reranking, metadata, prompts, and RAG pipelines.
 - `src/backonthelangchain/utils/` contains shared environment and tracing
   helpers.
 - `examples/` contains runnable teaching scripts. Prefer adding or updating
   these when behavior is meant to be demonstrated.
+- `web/` contains the Next.js unified-graph viewer and SSE consumer.
+- `docs/` contains user and contributor reference material linked from the
+  README.
 - `tests/` contains automated tests. Add focused tests when behavior changes.
 - `skills/` contains agent-facing workflow guidance for this repository.
 
@@ -93,6 +100,21 @@ Agents may inspect `.env.example` but must not inspect `.env`.
 - Do not modify application code when the request is limited to agent harness
   files such as `AGENTS.md`, `skills/`, or `scripts/`.
 
+## Unified graph invariants
+
+- Keep `build_unified_support_graph` authoritative for execution and graph
+  descriptions. Do not maintain a separate frontend graph definition.
+- Keep node identifiers stable across graph metadata, streamed events, and
+  frontend execution state.
+- Treat simulated component status as explicit demo evidence, never as real
+  monitoring data or a hard-coded routing result.
+- Compile request-scoped unified graphs without checkpoints so concurrent API
+  requests cannot reuse execution state.
+- Stream only allowlisted application outputs. Never expose prompts, raw
+  provider responses, stack traces, or hidden model reasoning.
+- Keep FAQ retrieval optional. Required safety, status, routing, and response
+  stages must not become caller-disableable.
+
 ## Documentation
 
 - Keep `changelog.md` up to date for meaningful repository changes.
@@ -105,8 +127,11 @@ Agents may inspect `.env.example` but must not inspect `.env`.
 
 - The project uses Poetry.
 - Base install: `poetry install`
+- Development tools: `poetry install -E dev`
+- Jev-backed examples and the web backend: `poetry install -E jev`
 - RAG examples need optional dependencies: `poetry install -E rag`
 - Notebook work needs optional dependencies: `poetry install -E notebooks`
+- The frontend uses the lockfile under `web/`; install with `npm ci`.
 - Runtime credentials belong in local-only `.env` or `.env.local` files.
 
 ## Validation
@@ -118,6 +143,19 @@ Before proposing changes, run the full repository check when applicable:
 ```
 
 The check script runs Ruff and pytest through Poetry.
+
+When frontend behavior or its documented setup changes, also run:
+
+```bash
+cd web
+npm ci
+npm test
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Python and frontend tests use fake providers and must not make paid calls.
 
 For narrowly scoped documentation or agent-harness-only changes, the full check
 may still be useful but is not always required. If it is skipped or cannot run,
