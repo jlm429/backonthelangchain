@@ -150,7 +150,6 @@ class SupportRouterState(TypedDict, total=False):
     jev_classified_route: RouteDomain
     needs_human_escalation: float
     jev_used_fallback: bool
-    explicit_human_request_detected: bool
 
     # Execution
     tool_result: str
@@ -194,7 +193,6 @@ class SupportRouterOutput(TypedDict, total=False):
     jev_classified_route: RouteDomain
     needs_human_escalation: float
     jev_used_fallback: bool
-    explicit_human_request_detected: bool
     response_context: dict[str, Any]
     stage_evidence: list[dict[str, Any]]
 

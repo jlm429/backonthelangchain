@@ -70,7 +70,6 @@ type SupportResult = {
     human_escalation_probability: number | null;
     human_escalation_threshold: number;
     human_escalation_threshold_met: boolean | null;
-    explicit_human_request_detected: boolean;
   };
   retrieval: {
     enabled: boolean;
@@ -459,7 +458,7 @@ function ResultView({ result }: { result: SupportResult }) {
         <dl>
           <div><dt>User query</dt><dd>{result.provenance.user_query}</dd></div>
           <div><dt>System evidence</dt><dd>{formatLabel(result.provenance.system_evidence_assessment)}</dd></div>
-          <div><dt>Jev route</dt><dd>{formatLabel(result.provenance.jev_route)}</dd></div>
+          <div><dt>Jev classified route</dt><dd>{formatLabel(result.provenance.jev_route)}</dd></div>
           <div><dt>Retrieved documents</dt><dd>{result.provenance.retrieved_documents.join(", ") || "None"}</dd></div>
           <div><dt>Human escalation</dt><dd>{result.provenance.human_escalation_triggered ? "Triggered" : "Not triggered"}</dd></div>
           <div><dt>Response production</dt><dd>{formatLabel(result.provenance.response_production)}</dd></div>
@@ -531,7 +530,6 @@ function ResultView({ result }: { result: SupportResult }) {
           </div>
           <div className="jev-observations">
             <span>Classified route: <strong>{formatLabel(result.jev.classified_route)}</strong></span>
-            <span>Explicit human request: <strong>{result.jev.explicit_human_request_detected ? "Detected" : "Not detected"}</strong></span>
           </div>
           <div className="probabilities">
             {Object.entries(result.jev.route_probabilities).map(([route, probability]) => (

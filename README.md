@@ -110,9 +110,8 @@ procedure is not embedded in the response prompt or application routing logic.
 
 For escalation, compare ordinary failure, repeated failure, critical business
 impact, and the explicit human request. The UI shows Jev's escalation
-probability, the configured `0.80` threshold, whether it was met, and whether
-the application detected explicit human-request language. Detection is
-observational and does not override Jev.
+probability, the configured `0.80` threshold, and whether it was met. Jev
+remains authoritative for escalation.
 
 ## What the unified example demonstrates
 
@@ -120,7 +119,8 @@ observational and does not override Jev.
   response generation.
 - **Simulated system and tool evidence** records configured service state and
   whether the user's report is corroborated, contradicted, partially
-  corroborated, or not applicable. It is demo evidence, not monitoring data.
+  corroborated, mixed across services, or not applicable. It is demo evidence,
+  not monitoring data.
 - **Jev** is the routing and escalation classifier. The application exposes its
   route confidence, route probabilities, escalation probability, thresholds,
   fallback use, and threshold results without substituting a desired outcome.

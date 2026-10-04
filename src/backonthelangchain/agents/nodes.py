@@ -6,7 +6,6 @@ logic lives in services/ so it can be tested and reused outside these graphs.
 
 import json
 from pathlib import Path
-import re
 from typing import Any
 
 from backonthelangchain.agents.schemas import (
@@ -33,13 +32,6 @@ HUMAN_ESCALATION_ANSWER = (
 )
 JEV_ROUTE_CONFIDENCE_THRESHOLD = 0.70
 JEV_HUMAN_ESCALATION_THRESHOLD = 0.80
-EXPLICIT_HUMAN_REQUEST = re.compile(
-    r"(?:\b(?:connect|transfer|escalate|speak|talk)\b.{0,40}"
-    r"\b(?:human|person|agent|representative)\b)|"
-    r"(?:\b(?:human|person|agent|representative)\b.{0,40}"
-    r"\b(?:connect|transfer|escalate|speak|talk)\b)",
-    re.IGNORECASE,
-)
 
 
 def _stage_evidence(
@@ -62,11 +54,6 @@ def _stage_evidence(
     ]
 
 
-def detect_explicit_human_request(user_query: str) -> bool:
-    """Detect an explicit handoff request without changing Jev's decision."""
-    return EXPLICIT_HUMAN_REQUEST.search(user_query) is not None
-
-
 def _escalation_context(state: SupportRouterState) -> dict[str, Any]:
     probability = state.get("jev_human_escalation_probability")
     return {
@@ -76,9 +63,6 @@ def _escalation_context(state: SupportRouterState) -> dict[str, Any]:
             probability >= JEV_HUMAN_ESCALATION_THRESHOLD
             if probability is not None
             else None
-        ),
-        "explicit_human_request_detected": state.get(
-            "explicit_human_request_detected", False
         ),
     }
 
@@ -214,7 +198,6 @@ def make_jev_router_node(
     def jev_router_node(state: SupportRouterState) -> SupportRouterState:
         user_query = state["user_query"]
         status_evidence = state.get("status_evidence")
-        explicit_request = detect_explicit_human_request(user_query)
 
         def with_evidence(
             route_state: SupportRouterState,
@@ -243,7 +226,6 @@ def make_jev_router_node(
             )
             return {
                 **route_state,
-                "explicit_human_request_detected": explicit_request,
                 "stage_evidence": _stage_evidence(
                     "jev_router",
                     "Jev support routing",
@@ -268,7 +250,6 @@ def make_jev_router_node(
                             JEV_HUMAN_ESCALATION_THRESHOLD
                         ),
                         "human_escalation_threshold_met": escalation_met,
-                        "explicit_human_request_detected": explicit_request,
                         "fallback_used": route_state.get(
                             "jev_used_fallback", False
                         ),
@@ -309,7 +290,6 @@ def make_jev_router_node(
             "jev_classified_route": result.support_route,
             "needs_human_escalation": result.needs_human_escalation,
             "jev_used_fallback": False,
-            "explicit_human_request_detected": explicit_request,
         }
 
         if result.needs_human_escalation >= JEV_HUMAN_ESCALATION_THRESHOLD:
@@ -452,13 +432,20 @@ def simulated_status_context_node(
         state["user_query"],
         state["simulated_status"],
     )
+    report_relations = ", ".join(
+        f"{report['system']}={report['relation']}"
+        for report in evidence["reports"]
+    )
+    summary = f"System evidence was {evidence['assessment'].replace('_', ' ')}."
+    if report_relations:
+        summary = f"{summary} Service relations: {report_relations}."
     return {
         "status_evidence": evidence,
         "status_context": json.dumps(evidence, sort_keys=True),
         "stage_evidence": _stage_evidence(
             "simulated_status_context",
             "Simulated status",
-            f"System evidence was {evidence['assessment'].replace('_', ' ')}.",
+            summary,
             inputs={
                 "user_query": state["user_query"],
                 "configured_statuses": state["simulated_status"],

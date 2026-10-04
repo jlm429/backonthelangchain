@@ -543,6 +543,51 @@ def test_outage_evidence_is_associated_with_component_phrases(
     assert [report["system"] for report in evidence["reports"]] == expected_systems
 
 
+def test_mixed_service_evidence_is_preserved_in_stage_and_execution_summaries():
+    statuses = SimulatedSystemState(
+        authentication="outage",
+        billing="operational",
+        checkout="operational",
+        api="operational",
+    )
+    payload = SupportRunRequest(
+        query="Authentication and checkout are down",
+        options=SupportGraphOptions(faq_retrieval=False),
+        simulated_status=statuses,
+    )
+    factory, _, _, _, _ = make_graph_factory()
+
+    result = completed_result(
+        collect_events(UnifiedSupportRunner(factory), payload)
+    )
+
+    evidence = result["system_status"]["evidence"]
+    assert evidence["assessment"] == "mixed"
+    assert {
+        report["system"]: report["relation"] for report in evidence["reports"]
+    } == {
+        "authentication": "corroborated",
+        "checkout": "contradicted",
+    }
+    status_stage = next(
+        item
+        for item in result["stage_evidence"]
+        if item["stage_id"] == "simulated_status_context"
+    )
+    assert status_stage["summary"] == (
+        "System evidence was mixed. Service relations: "
+        "authentication=corroborated, checkout=contradicted."
+    )
+    system_fact = next(
+        fact["text"]
+        for fact in result["execution_summary"]["facts"]
+        if fact["category"] == "system_evidence"
+    )
+    assert "assessment was mixed" in system_fact
+    assert "authentication=corroborated, checkout=contradicted" in system_fact
+    assert result["provenance"]["system_evidence_assessment"] == "mixed"
+
+
 def test_live_events_use_graph_node_ids_and_preserve_actual_path():
     factory, _, _, _, _ = make_graph_factory()
 
@@ -639,14 +684,13 @@ def test_node_failure_is_streamed_without_provider_details():
 
 
 @pytest.mark.parametrize(
-    ("query", "expected_route", "expected_outcome", "expected_score", "explicit"),
+    ("query", "expected_route", "expected_outcome", "expected_score"),
     [
         (
             "I cannot log in after enabling MFA.",
             "tech_support",
             "completed",
             0.08,
-            False,
         ),
         (
             "I have reset my password five times, re-enrolled MFA twice, and I "
@@ -654,7 +698,6 @@ def test_node_failure_is_streamed_without_provider_details():
             "tech_support",
             "completed",
             0.46,
-            False,
         ),
         (
             "Our checkout system has been unavailable for 45 minutes and customers "
@@ -662,7 +705,6 @@ def test_node_failure_is_streamed_without_provider_details():
             "tech_support",
             "completed",
             0.68,
-            False,
         ),
         (
             "I have tried the troubleshooting steps several times and this still "
@@ -670,14 +712,12 @@ def test_node_failure_is_streamed_without_provider_details():
             "human_escalation",
             "escalated",
             0.91,
-            True,
         ),
         (
             "I was charged twice for my subscription this month.",
             "billing",
             "completed",
             0.08,
-            False,
         ),
     ],
 )
@@ -686,7 +726,6 @@ def test_deterministic_jev_scenarios_expose_actual_scores_without_overrides(
     expected_route,
     expected_outcome,
     expected_score,
-    explicit,
 ):
     factory, _, _, _, _ = make_graph_factory(jev=DeterministicScenarioJevService())
 
@@ -701,7 +740,23 @@ def test_deterministic_jev_scenarios_expose_actual_scores_without_overrides(
     assert result["jev"]["human_escalation_threshold_met"] is (
         expected_score >= 0.8
     )
-    assert result["jev"]["explicit_human_request_detected"] is explicit
+
+
+def test_provenance_keeps_jev_classification_distinct_from_fallback_route():
+    factory, _, _, _, _ = make_graph_factory(
+        jev=FakeJevService(route="billing", confidence=0.6)
+    )
+
+    result = completed_result(
+        collect_events(
+            UnifiedSupportRunner(factory),
+            request(query="I was charged twice for my subscription."),
+        )
+    )
+
+    assert result["jev"]["classified_route"] == "billing"
+    assert result["routing"]["destination"] == "tech_support"
+    assert result["provenance"]["jev_route"] == "billing"
 
 
 def test_reported_checkout_outage_exposes_contradictory_and_corroborating_evidence():

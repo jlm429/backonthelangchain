@@ -183,6 +183,12 @@ def _build_execution_summary(
             f"Simulated evidence assessment was {status_outputs['assessment']}; "
             f"relevant service state: {service_text}."
         )
+        report_text = ", ".join(
+            f"{report['system']}={report['relation']}"
+            for report in status_outputs["reports"]
+        )
+        if report_text:
+            status_text = f"{status_text} Service relations: {report_text}."
     facts.append(ExecutionSummaryFact(category="system_evidence", text=status_text))
 
     if jev is None:
@@ -200,9 +206,7 @@ def _build_execution_summary(
             f"Escalation probability was "
             f"{_format_probability(jev['human_escalation_probability'])}; the "
             f"{jev['human_escalation_threshold']:.2f} escalation threshold was "
-            f"{_threshold_result(jev['human_escalation_threshold_met'])}. "
-            f"Explicit human request detected: "
-            f"{'yes' if jev['explicit_human_request_detected'] else 'no'}."
+            f"{_threshold_result(jev['human_escalation_threshold_met'])}."
         )
     facts.append(ExecutionSummaryFact(category="routing", text=routing_text))
 
@@ -288,9 +292,6 @@ def _normalize_result(
                 if escalation_probability is not None
                 else None
             ),
-            "explicit_human_request_detected": bool(
-                state.get("explicit_human_request_detected", False)
-            ),
         }
 
     status_evidence = state.get("status_evidence")
@@ -337,7 +338,9 @@ def _normalize_result(
         "system_evidence_assessment": (
             status_evidence.get("assessment") if status_evidence else "not_evaluated"
         ),
-        "jev_route": destination if jev is not None else "not_evaluated",
+        "jev_route": (
+            jev["classified_route"] if jev is not None else "not_evaluated"
+        ),
         "retrieved_documents": [item["title"] for item in retrieval_documents],
         "human_escalation_triggered": outcome == "escalated",
         "response_production": production,

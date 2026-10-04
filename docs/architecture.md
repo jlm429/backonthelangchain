@@ -76,8 +76,8 @@ The inspectable nodes expose:
 | --- | --- |
 | User Query | validated query, selected simulated states, and RAG option |
 | OpenAI Moderation | allowed or blocked, flagged state, model, and normalized result |
-| Simulated Status | configured state, relevant services, evidence reports, and overall corroboration assessment |
-| Jev Support Routing | classified and selected routes, route confidence and probabilities, route and escalation thresholds, threshold results, fallback use, and explicit-human-request detection |
+| Simulated Status | configured state, relevant services, per-service evidence relations, and an overall assessment including mixed evidence |
+| Jev Support Routing | classified and selected routes, route confidence and probabilities, route and escalation thresholds, threshold results, and fallback use |
 | Tier 1 FAQ Retrieval | retrieval query, result count, ranked demo documents, document ids, scores when available, snippets, and exact response context |
 | Technical Response | query, route, structured system evidence, retrieved knowledge supplied, escalation state, production type, and generated response |
 | Billing Response | query, route, system evidence visible to the application, escalation state, production type, and structured response |
@@ -85,10 +85,9 @@ The inspectable nodes expose:
 | Blocked Response | the moderation decision and deterministic safe response |
 | Final Result | outcome, answer, deterministic execution summary, and provenance |
 
-The explicit-human-request detector is observable context only. It does not
-force escalation or replace Jev's score. When a provider decision is
-unavailable, the evidence says `unknown` and records fallback use rather than
-inventing a reason.
+When a provider decision is unavailable, the evidence says `unknown` and
+records fallback use rather than inventing a reason. Jev remains authoritative
+for both routing and escalation classification.
 
 Each web request receives a newly compiled, checkpoint-free graph. This keeps
 request state isolated. The focused teaching graphs may use in-memory
@@ -143,9 +142,10 @@ and outcome. This is deterministic application narration, not generated
 chain-of-thought.
 
 The final result also records the user query, selected simulated state, status
-assessment, Jev destination, retrieved document names, escalation outcome, and
-response production type. Changing a query, status selection, or RAG setting
-therefore changes both the executed path and its visible provenance.
+assessment, Jev classified route, retrieved document names, escalation
+outcome, and response production type. Changing a query, status selection, or
+RAG setting therefore changes both the executed path and its visible
+provenance.
 
 ## Application boundary
 

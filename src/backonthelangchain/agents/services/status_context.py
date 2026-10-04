@@ -159,7 +159,9 @@ def build_simulated_status_evidence(
         )
 
     report_relations = {report["relation"] for report in reports}
-    if "corroborated" in report_relations:
+    if len(report_relations) > 1:
+        assessment = "mixed"
+    elif "corroborated" in report_relations:
         assessment = "corroborated"
     elif "partially_corroborated" in report_relations:
         assessment = "partially_corroborated"

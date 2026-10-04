@@ -7,8 +7,7 @@
 - Added backend-authoritative stage evidence for every executed unified-graph
   stage, selectable node inspection, deterministic execution summaries, and
   final-result provenance.
-- Added visible Jev route and escalation thresholds, threshold results, and
-  observational explicit-human-request detection without overriding Jev.
+- Added visible Jev route and escalation thresholds with threshold results.
 - Added fictional demo knowledge for accounting workstation recovery, VPN
   certificate recovery, warehouse scanner synchronization, and meeting room
   display recovery, plus paired RAG and system-evidence scenarios.
