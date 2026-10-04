@@ -350,16 +350,22 @@ def test_negated_outage_language_does_not_create_evidence(query):
     assert jev.calls[0][1]["user_reported_problem"] is False
 
 
-def test_coordinated_negation_does_not_hide_a_later_outage_report():
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Checkout is not down and authentication is down",
+        "Neither billing nor checkout is down and authentication is down",
+        "Neither billing nor checkout is down, and authentication is down",
+    ],
+)
+def test_coordinated_negation_does_not_hide_a_later_outage_report(query):
     factory, _, jev, _, _ = make_graph_factory()
 
     events = collect_events(
         UnifiedSupportRunner(factory),
         request(
             status="outage",
-            query=(
-                "Neither billing nor checkout is down, and authentication is down"
-            ),
+            query=query,
         ),
     )
 

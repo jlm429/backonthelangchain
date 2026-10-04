@@ -31,16 +31,23 @@ CLAUSE_BOUNDARY = re.compile(r"[.!?;]+|\b(?:but|while|whereas)\b")
 COMPONENT_CONNECTOR = re.compile(
     r"\s*(?:(?:,|\band\b|\bor\b|\bnor\b|\bas well as\b)\s*)+"
 )
-COORDINATED_NEGATION_BOUNDARY = re.compile(r",\s*(?:and|or)\b")
+PREDICATE_CONJUNCTION = re.compile(r"(?:,\s*)?\b(?:and|or)\b")
 
 
 def _is_negated(text: str, marker_start: int) -> bool:
     prefix = text[:marker_start]
-    coordinated_prefix = COORDINATED_NEGATION_BOUNDARY.split(prefix)[-1]
+    negation_scope = prefix
+    for conjunction in PREDICATE_CONJUNCTION.finditer(prefix):
+        preceding_text = prefix[: conjunction.start()]
+        if any(
+            re.search(rf"\b{re.escape(marker)}\b", preceding_text)
+            for marker in OUTAGE_MARKERS
+        ):
+            negation_scope = prefix[conjunction.end() :]
     return bool(
         re.search(
             r"\bneither\b[^.!?;]*\bnor\b[^.!?;]*$",
-            coordinated_prefix,
+            negation_scope,
         )
         or re.search(
             (
@@ -49,7 +56,7 @@ def _is_negated(text: str, marker_start: int) -> bool:
                 r"\bdoesn't|\bdoesnt|\bdon't|\bdont|\bdidn't|\bdidnt)\s+"
                 r"(?:(?:an?|the)\s+)?(?:[\w'-]+\s+){0,4}$"
             ),
-            prefix,
+            negation_scope,
         )
     )
 
