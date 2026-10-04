@@ -8,6 +8,9 @@ from backonthelangchain.agents.services.jev_router import (
 )
 from backonthelangchain.agents.services.router import RouterService
 from backonthelangchain.agents.services.safety import OpenAIModerationSafetyService
+from backonthelangchain.agents.services.status_context import (
+    build_simulated_status_evidence,
+)
 from backonthelangchain.agents.services.tech_support import TechSupportService
 from backonthelangchain.agents.services.tech_support_rag import TechSupportRAGService
 
@@ -18,6 +21,7 @@ __all__ = [
     "JevSupportRouterService",
     "OpenAIModerationSafetyService",
     "RouterService",
+    "build_simulated_status_evidence",
     "TechSupportService",
     "TechSupportRAGService",
 ]

@@ -13,7 +13,9 @@ JEV_SUPPORT_QUESTIONS: dict[str, dict[str, Any]] = {
         "type": "noul",
         "instructions": (
             "Does `support_query` require a human support agent instead of "
-            "automated technical or billing support?"
+            "automated technical or billing support? When "
+            "`simulated_system_evidence` is present, treat it as contextual demo "
+            "evidence rather than a forced decision or real monitoring result."
         ),
         "criteria": {
             "true": (
@@ -30,7 +32,11 @@ JEV_SUPPORT_QUESTIONS: dict[str, dict[str, Any]] = {
     },
     "support_route": {
         "type": "choice",
-        "instructions": "Which support domain should handle `support_query`?",
+        "instructions": (
+            "Which support domain should handle `support_query`? When "
+            "`simulated_system_evidence` is present, use it only as contextual "
+            "demo evidence."
+        ),
         "criteria": {
             "tech_support": (
                 "Login issues, bugs, errors, setup, configuration, performance, "
@@ -55,16 +61,21 @@ class JevSupportRouterService:
     def __init__(self, *, client: Any | None = None) -> None:
         self._client = client
 
-    def evaluate(self, user_query: str) -> JevSupportDecision:
+    def evaluate(
+        self,
+        user_query: str,
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> JevSupportDecision:
         """Return normalized judgments without exposing TypeSafe SDK objects."""
         try:
             if self._client is not None:
-                response = self._request(self._client, user_query)
+                response = self._request(self._client, user_query, context=context)
             else:
                 from typesafe_sdk import TypeSafeClient
 
                 with TypeSafeClient() as client:
-                    response = self._request(client, user_query)
+                    response = self._request(client, user_query, context=context)
 
             route_answer = response.answers["support_route"]
             escalation_answer = response.answers["needs_human_escalation"]
@@ -81,9 +92,18 @@ class JevSupportRouterService:
                 "Jev could not provide a valid support-routing judgment."
             ) from exc
 
-    def _request(self, client: Any, user_query: str) -> Any:
+    def _request(
+        self,
+        client: Any,
+        user_query: str,
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> Any:
+        state: dict[str, Any] = {"support_query": user_query}
+        if context is not None:
+            state["simulated_system_evidence"] = context
         return client.system_one(
             model=JEV_MODEL,
-            state={"support_query": user_query},
+            state=state,
             questions=JEV_SUPPORT_QUESTIONS,
         )

@@ -21,13 +21,20 @@ def configured_settings() -> AppSettings:
     )
 
 
-def make_client(handler, *, settings_provider=configured_settings, limiter=None):
+def make_client(
+    handler,
+    *,
+    settings_provider=configured_settings,
+    limiter=None,
+    support_runner=None,
+):
     registry = build_example_registry(jev_handler=handler)
     app = create_app(
         registry=registry,
         settings_provider=settings_provider,
         rate_limiter=limiter,
         cors_origins=("http://localhost:3000",),
+        support_runner=support_runner,
     )
     return TestClient(app)
 
@@ -281,3 +288,88 @@ def test_cors_allows_only_the_configured_origin():
 
     assert allowed.headers["access-control-allow-origin"] == "http://localhost:3000"
     assert "access-control-allow-origin" not in denied.headers
+
+
+class FakeSupportRunner:
+    def __init__(self):
+        self.requests = []
+
+    async def events(self, request):
+        self.requests.append(request)
+        yield {"type": "run_started", "run_id": "fake-run"}
+        yield {
+            "type": "node_started",
+            "node_id": "safety_check",
+        }
+        yield {
+            "type": "run_completed",
+            "run_id": "fake-run",
+            "result": {"outcome": "completed"},
+        }
+
+
+def test_support_graph_endpoint_serializes_real_enabled_shape():
+    client = make_client(successful_handler)
+
+    response = client.get("/api/support/graph?faq_retrieval=true")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["graph_id"] == "unified-support"
+    assert next(
+        node for node in body["nodes"] if node["id"] == "faq_retrieval"
+    )["enabled"] is True
+    assert {
+        (edge["source"], edge["target"])
+        for edge in body["edges"]
+    } >= {
+        ("jev_router", "faq_retrieval"),
+        ("faq_retrieval", "tech_support_answer"),
+    }
+
+
+def test_support_endpoint_streams_sse_and_validated_context():
+    runner = FakeSupportRunner()
+    client = make_client(successful_handler, support_runner=runner)
+
+    response = client.post(
+        "/api/support/run",
+        json={
+            "query": "Checkout is down",
+            "options": {"faq_retrieval": False},
+            "simulated_status": {
+                "authentication": "operational",
+                "billing": "degraded",
+                "checkout": "outage",
+                "api": "operational",
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert "event: execution" in response.text
+    assert '"type": "node_started"' in response.text
+    assert runner.requests[0].simulated_status.checkout == "outage"
+    assert OPENAI_SENTINEL not in response.text
+    assert TYPESAFE_SENTINEL not in response.text
+
+
+def test_required_nodes_cannot_be_disabled_by_run_payload():
+    runner = FakeSupportRunner()
+    client = make_client(successful_handler, support_runner=runner)
+
+    response = client.post(
+        "/api/support/run",
+        json={
+            "query": "hello",
+            "options": {
+                "faq_retrieval": False,
+                "safety_check": False,
+            },
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "invalid_request"
+    assert runner.requests == []

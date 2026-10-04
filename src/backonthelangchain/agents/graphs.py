@@ -3,6 +3,9 @@
 Graphs compose reusable services into runnable LangGraph workflows.
 """
 
+from dataclasses import dataclass
+from typing import Any
+
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
@@ -15,6 +18,8 @@ from backonthelangchain.agents.nodes import (
     blocked_response_node,
     human_escalation_node,
     make_billing_node,
+    make_contextual_tech_support_node,
+    make_faq_retrieval_node,
     make_jev_router_node,
     make_router_node,
     make_safety_check_node,
@@ -23,11 +28,14 @@ from backonthelangchain.agents.nodes import (
     pick_jev_route,
     pick_route,
     safety_gate,
+    simulated_status_context_node,
 )
 from backonthelangchain.agents.schemas import (
     SupportRouterInput,
     SupportRouterOutput,
     SupportRouterState,
+    UnifiedSupportInput,
+    UnifiedSupportOutput,
 )
 from backonthelangchain.agents.services import (
     BillingService,
@@ -37,6 +45,108 @@ from backonthelangchain.agents.services import (
     TechSupportRAGService,
     TechSupportService,
 )
+
+
+@dataclass(frozen=True)
+class UnifiedSupportOptions:
+    """Backend-authoritative optional stages for the unified graph."""
+
+    faq_retrieval: bool = False
+
+
+class _LazyDefaultRAGPipeline:
+    """Create provider-backed retrieval only after its graph node is reached."""
+
+    def __init__(self) -> None:
+        self._pipeline = None
+
+    def run(self, query: str):
+        if self._pipeline is None:
+            from backonthelangchain.rag.pipelines import TechSupportRAGPipeline
+            from backonthelangchain.rag.rerankers import NoOpReranker
+
+            self._pipeline = TechSupportRAGPipeline(
+                reranker=NoOpReranker(),
+                retrieve_top_k=5,
+                rerank_top_k=3,
+            )
+        return self._pipeline.run(query)
+
+
+UNIFIED_SUPPORT_NODE_METADATA: dict[str, dict[str, Any]] = {
+    "__start__": {
+        "label": "User query",
+        "description": "Validated query and simulated demo state enter the graph.",
+        "kind": "boundary",
+        "required": True,
+        "stage": 0,
+    },
+    "safety_check": {
+        "label": "OpenAI Moderation",
+        "description": "Authoritative mandatory safety gate.",
+        "kind": "safety",
+        "required": True,
+        "stage": 1,
+    },
+    "blocked_response": {
+        "label": "Blocked response",
+        "description": "Safe deterministic response for moderated requests.",
+        "kind": "response",
+        "required": True,
+        "stage": 2,
+    },
+    "simulated_status_context": {
+        "label": "Simulated status evidence",
+        "description": "Compares the user report with selected demo system state.",
+        "kind": "context",
+        "required": True,
+        "stage": 2,
+    },
+    "jev_router": {
+        "label": "Jev support routing",
+        "description": "Evaluates escalation and route with an OpenAI fallback.",
+        "kind": "routing",
+        "required": True,
+        "stage": 3,
+    },
+    "faq_retrieval": {
+        "label": "Tier 1 FAQ retrieval",
+        "description": "Optional existing embedding and retrieval pipeline.",
+        "kind": "retrieval",
+        "required": False,
+        "stage": 4,
+    },
+    "human_escalation": {
+        "label": "Human escalation",
+        "description": "Returns the deterministic handoff response.",
+        "kind": "escalation",
+        "required": True,
+        "stage": 4,
+    },
+    "tech_support_answer": {
+        "label": "Technical response",
+        "description": "Generates guidance from available status and FAQ context.",
+        "kind": "response",
+        "required": True,
+        "stage": 5,
+    },
+    "billing_answer": {
+        "label": "Billing response",
+        "description": "Returns the existing structured billing response.",
+        "kind": "response",
+        "required": True,
+        "stage": 4,
+    },
+    "__end__": {
+        "label": "Final result",
+        "description": "Returns normalized application-level output.",
+        "kind": "boundary",
+        "required": True,
+        "stage": 6,
+    },
+}
+
+
 def build_support_router_graph(
     *,
     model: str = "gpt-5.4-mini",
@@ -286,6 +396,90 @@ def build_safe_rag_support_router_graph(
         },
     )
     builder.add_edge("blocked_response", END)
+    builder.add_edge("tech_support_answer", END)
+    builder.add_edge("billing_answer", END)
+
+    return builder.compile(checkpointer=checkpointer or MemorySaver())
+
+
+def build_unified_support_graph(
+    *,
+    options: UnifiedSupportOptions | None = None,
+    model: str = "gpt-5.4-mini",
+    moderation_model: str = "omni-moderation-latest",
+    checkpointer=None,
+    safety_service=None,
+    jev_router_service=None,
+    fallback_router_service=None,
+    tech_support_service=None,
+    billing_service=None,
+    rag_pipeline=None,
+):
+    """Build the primary support graph used by the interactive web application."""
+    active_options = options or UnifiedSupportOptions()
+    safety_service = safety_service or OpenAIModerationSafetyService(
+        model=moderation_model
+    )
+    jev_router_service = jev_router_service or JevSupportRouterService()
+    fallback_router_service = fallback_router_service or RouterService(
+        get_router_model(model=model)
+    )
+    tech_support_service = tech_support_service or TechSupportService(
+        get_chat_model(model=model, temperature=0.1)
+    )
+    billing_service = billing_service or BillingService(get_billing_model(model=model))
+
+    if active_options.faq_retrieval and rag_pipeline is None:
+        rag_pipeline = _LazyDefaultRAGPipeline()
+
+    builder = StateGraph(
+        SupportRouterState,
+        input_schema=UnifiedSupportInput,
+        output_schema=UnifiedSupportOutput,
+    )
+    builder.add_node("safety_check", make_safety_check_node(safety_service))
+    builder.add_node("blocked_response", blocked_response_node)
+    builder.add_node("simulated_status_context", simulated_status_context_node)
+    builder.add_node(
+        "jev_router",
+        make_jev_router_node(jev_router_service, fallback_router_service),
+    )
+    builder.add_node("human_escalation", human_escalation_node)
+    builder.add_node(
+        "tech_support_answer",
+        make_contextual_tech_support_node(tech_support_service),
+    )
+    builder.add_node("billing_answer", make_billing_node(billing_service))
+    if active_options.faq_retrieval:
+        builder.add_node("faq_retrieval", make_faq_retrieval_node(rag_pipeline))
+
+    builder.add_edge(START, "safety_check")
+    builder.add_conditional_edges(
+        "safety_check",
+        safety_gate,
+        {
+            "router": "simulated_status_context",
+            "blocked_response": "blocked_response",
+        },
+    )
+    builder.add_edge("simulated_status_context", "jev_router")
+    builder.add_conditional_edges(
+        "jev_router",
+        pick_jev_route,
+        {
+            "human_escalation": "human_escalation",
+            "tech_support_answer": (
+                "faq_retrieval"
+                if active_options.faq_retrieval
+                else "tech_support_answer"
+            ),
+            "billing_answer": "billing_answer",
+        },
+    )
+    if active_options.faq_retrieval:
+        builder.add_edge("faq_retrieval", "tech_support_answer")
+    builder.add_edge("blocked_response", END)
+    builder.add_edge("human_escalation", END)
     builder.add_edge("tech_support_answer", END)
     builder.add_edge("billing_answer", END)
 

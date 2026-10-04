@@ -49,7 +49,7 @@ class FakeJevService:
         self.error = error
         self.queries = []
 
-    def evaluate(self, query):
+    def evaluate(self, query, *, context=None):
         self.queries.append(query)
         if self.error is not None:
             raise self.error
@@ -61,7 +61,7 @@ class FakeRouterService:
         self.domain = domain
         self.queries = []
 
-    def route(self, query):
+    def route(self, query, *, context=None):
         self.queries.append(query)
         return RouteDecision(domain=self.domain, reason="fake fallback route")
 

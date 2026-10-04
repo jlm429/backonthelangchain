@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "backonthelangchain | Interactive examples",
-  description: "Run production-minded LangGraph examples from the browser.",
+  title: "backonthelangchain | Unified support graph",
+  description: "Inspect and run a live production-minded LangGraph support system.",
 };
 
 export default function RootLayout({
