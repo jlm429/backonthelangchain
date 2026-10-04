@@ -11,6 +11,7 @@ import {
   graphMatchesOptions,
   initialNodeExecutions,
   isGraphDescription,
+  isTerminalExecutionEvent,
   parseSseBuffer,
 } from "./support-graph";
 
@@ -426,6 +427,7 @@ export default function Home() {
     setError(null);
     setResult(null);
     setExecutions(initialNodeExecutions(graph));
+    let receivedTerminalEvent = false;
     try {
       const response = await fetch("/backend/support/run", {
         method: "POST",
@@ -452,11 +454,21 @@ export default function Home() {
         buffer += decoder.decode(value, { stream: !done });
         const parsed = parseSseBuffer(done ? `${buffer}\n\n` : buffer);
         buffer = parsed.remainder;
-        parsed.events.forEach(handleEvent);
-        if (done) break;
+        parsed.events.forEach((executionEvent) => {
+          handleEvent(executionEvent);
+          if (isTerminalExecutionEvent(executionEvent)) receivedTerminalEvent = true;
+        });
+        if (done) {
+          if (!receivedTerminalEvent) {
+            setError("The backend stream ended before the support run completed.");
+          }
+          break;
+        }
       }
     } catch {
-      setError("The backend stream was interrupted. Check the service and try again.");
+      if (!receivedTerminalEvent) {
+        setError("The backend stream was interrupted. Check the service and try again.");
+      }
     } finally {
       setRunning(false);
     }

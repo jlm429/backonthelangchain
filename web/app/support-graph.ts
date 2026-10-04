@@ -78,6 +78,10 @@ export function graphMatchesOptions(
   return graph?.options.faq_retrieval === faqRetrieval;
 }
 
+export function isTerminalExecutionEvent(event: ExecutionEvent): boolean {
+  return event.type === "run_completed" || event.type === "run_failed";
+}
+
 export function applyExecutionEvent(
   current: Record<string, NodeExecution>,
   event: ExecutionEvent,

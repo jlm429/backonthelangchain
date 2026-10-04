@@ -6,6 +6,7 @@ import {
   graphMatchesOptions,
   initialNodeExecutions,
   isGraphDescription,
+  isTerminalExecutionEvent,
   parseSseBuffer,
 } from "./support-graph";
 
@@ -80,4 +81,10 @@ test("parses complete SSE frames and preserves partial data", () => {
     { type: "node_started", node_id: "safety_check" },
   ]);
   assert.match(parsed.remainder, /node_completed/);
+});
+
+test("distinguishes terminal run events from partial streams", () => {
+  assert.equal(isTerminalExecutionEvent({ type: "node_completed" }), false);
+  assert.equal(isTerminalExecutionEvent({ type: "run_completed" }), true);
+  assert.equal(isTerminalExecutionEvent({ type: "run_failed" }), true);
 });

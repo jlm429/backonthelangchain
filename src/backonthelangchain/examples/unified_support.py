@@ -195,6 +195,12 @@ class UnifiedSupportRunner:
         self.graph_factory = graph_factory or (
             lambda options: build_unified_support_graph(options=options)
         )
+        self._graphs: dict[UnifiedSupportOptions, Any] = {}
+
+    def _graph(self, options: UnifiedSupportOptions):
+        if options not in self._graphs:
+            self._graphs[options] = self.graph_factory(options)
+        return self._graphs[options]
 
     async def events(
         self,
@@ -211,10 +217,8 @@ class UnifiedSupportRunner:
         }
 
         try:
-            graph = self.graph_factory(
-                UnifiedSupportOptions(
-                    faq_retrieval=request.options.faq_retrieval,
-                )
+            graph = self._graph(
+                UnifiedSupportOptions(faq_retrieval=request.options.faq_retrieval)
             )
             graph_input = {
                 "user_query": request.query,

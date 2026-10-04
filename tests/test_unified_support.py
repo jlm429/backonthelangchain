@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from backonthelangchain.agents.graphs import (
+    UnifiedSupportOptions,
     build_unified_support_graph,
 )
 from backonthelangchain.agents.schemas import (
@@ -211,6 +212,21 @@ def test_optional_retrieval_is_executed_only_when_enabled():
     assert "/srv/backonthelangchain" not in str(enabled_events)
 
 
+def test_runner_reuses_compiled_graph_for_matching_options():
+    factory, _, _, _, _ = make_graph_factory()
+    calls = []
+
+    def counting_factory(options):
+        calls.append(options)
+        return factory(options)
+
+    runner = UnifiedSupportRunner(counting_factory)
+    collect_events(runner, request(retrieval=True))
+    collect_events(runner, request(retrieval=True, query="Checkout is down"))
+
+    assert calls == [UnifiedSupportOptions(faq_retrieval=True)]
+
+
 def test_mandatory_moderation_blocks_all_later_stages():
     factory, _, jev, _, rag = make_graph_factory(
         safety=FakeSafetyService(allowed=False)
@@ -289,6 +305,24 @@ def test_negated_outage_language_does_not_create_evidence(query):
     assert evidence["user_reported_problem"] is False
     assert evidence["reports"] == []
     assert jev.calls[0][1]["user_reported_problem"] is False
+
+
+def test_outage_evidence_is_associated_with_its_component_clause():
+    factory, _, jev, _, _ = make_graph_factory()
+
+    events = collect_events(
+        UnifiedSupportRunner(factory),
+        request(
+            status="outage",
+            status_system="checkout",
+            query="Billing looks normal, but checkout is down",
+        ),
+    )
+
+    evidence = completed_result(events)["system_status"]["evidence"]
+    assert [report["system"] for report in evidence["reports"]] == ["checkout"]
+    assert evidence["reports"][0]["corroboration"] == "corroborated_outage"
+    assert jev.calls[0][1]["reports"] == evidence["reports"]
 
 
 def test_live_events_use_graph_node_ids_and_preserve_actual_path():

@@ -27,6 +27,7 @@ OUTAGE_MARKERS = (
     "can't",
     "unable",
 )
+CLAUSE_BOUNDARY = re.compile(r"[.!?;]+|\b(?:but|while|whereas)\b")
 
 
 def _contains_phrase(text: str, phrase: str) -> bool:
@@ -53,49 +54,58 @@ def build_simulated_status_evidence(
 ) -> dict[str, Any]:
     """Compare an outage report with explicitly simulated demo state."""
     normalized_query = user_query.casefold()
-    reports_problem = any(
-        _contains_affirmative_outage_marker(normalized_query, marker)
-        for marker in OUTAGE_MARKERS
-    )
-    mentioned = [
-        system
-        for system, aliases in SYSTEM_ALIASES.items()
-        if any(_contains_phrase(normalized_query, alias) for alias in aliases)
-    ]
+    reported_systems: set[SystemName] = set()
+    unspecified_report = False
+    for clause in CLAUSE_BOUNDARY.split(normalized_query):
+        if not any(
+            _contains_affirmative_outage_marker(clause, marker)
+            for marker in OUTAGE_MARKERS
+        ):
+            continue
+        clause_systems = {
+            system
+            for system, aliases in SYSTEM_ALIASES.items()
+            if any(_contains_phrase(clause, alias) for alias in aliases)
+        }
+        if clause_systems:
+            reported_systems.update(clause_systems)
+        else:
+            unspecified_report = True
 
     reports: list[dict[str, Any]] = []
-    if reports_problem:
-        if not mentioned:
-            reports.append(
-                {
-                    "system": "unspecified",
-                    "user_reported_problem": True,
-                    "simulated_status": None,
-                    "corroboration": "reported_only",
-                }
-            )
-        for system in mentioned:
-            simulated_status = statuses[system]
-            if simulated_status == "outage":
-                corroboration = "corroborated_outage"
-            elif simulated_status == "degraded":
-                corroboration = "partially_corroborated"
-            else:
-                corroboration = "not_corroborated"
-            reports.append(
-                {
-                    "system": system,
-                    "user_reported_problem": True,
-                    "simulated_status": simulated_status,
-                    "corroboration": corroboration,
-                }
-            )
+    if unspecified_report and not reported_systems:
+        reports.append(
+            {
+                "system": "unspecified",
+                "user_reported_problem": True,
+                "simulated_status": None,
+                "corroboration": "reported_only",
+            }
+        )
+    for system in SYSTEM_ALIASES:
+        if system not in reported_systems:
+            continue
+        simulated_status = statuses[system]
+        if simulated_status == "outage":
+            corroboration = "corroborated_outage"
+        elif simulated_status == "degraded":
+            corroboration = "partially_corroborated"
+        else:
+            corroboration = "not_corroborated"
+        reports.append(
+            {
+                "system": system,
+                "user_reported_problem": True,
+                "simulated_status": simulated_status,
+                "corroboration": corroboration,
+            }
+        )
 
     return {
         "source": "simulated_demo_state",
         "is_real_monitoring": False,
         "statuses": dict(statuses),
-        "user_reported_problem": reports_problem,
+        "user_reported_problem": bool(reports),
         "reports": reports,
         "notice": (
             "Demo evidence only. These values do not come from a monitoring service."
