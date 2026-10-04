@@ -28,9 +28,15 @@ Use this skill for repository work in `backonthelangchain`.
 
 - `src/backonthelangchain/agents/`: LangGraph workflows, nodes, schemas,
   prompts, tools, and domain service adapters.
+- `src/backonthelangchain/api/`: FastAPI routes, schemas, configuration, and
+  rate limiting.
+- `src/backonthelangchain/examples/`: reusable execution and registry adapters.
 - `src/backonthelangchain/rag/`: document loading, chunking, embeddings,
   retrieval, reranking, metadata, prompts, and RAG pipelines.
 - `examples/`: runnable demonstrations for the concepts in the package.
+- `web/`: Next.js visualization and Server-Sent Event consumption for the
+  unified support graph.
+- `docs/`: user and contributor reference material linked from the README.
 - `tests/`: pytest coverage for behavior and import contracts.
 - `AGENTS.md`: durable project instructions for agents.
 
@@ -53,6 +59,14 @@ Use this skill for repository work in `backonthelangchain`.
 - For examples, prefer command-line runnable scripts over notebook-only flows.
 - For provider integrations, keep tracing and optional services opt-in unless
   the task is specifically about that provider.
+- For the unified workflow, derive graph descriptions from
+  `build_unified_support_graph`; do not duplicate executable topology in the
+  frontend.
+- Preserve node ids across graph metadata, streamed events, and frontend state.
+- Treat simulated status as demo evidence and keep request-scoped API graphs
+  checkpoint-free.
+- Allowlist streamed application outputs and keep provider internals, prompts,
+  errors, and hidden reasoning server-side.
 - For harness-only tasks, do not modify application code under `src/`,
   `examples/`, or `tests/` unless the user expands the request.
 
@@ -74,3 +88,16 @@ poetry run pytest
 For documentation-only or agent-harness-only changes, the full check can be
 skipped if it is not useful or cannot run. State that clearly in the final
 response.
+
+When `web/` or its documented workflow changes, also run:
+
+```bash
+cd web
+npm ci
+npm test
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Tests must use fake providers and must not make paid calls.

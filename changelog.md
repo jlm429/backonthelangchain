@@ -36,6 +36,10 @@
 
 ### Documentation
 
+- Added the project banner, concise Python-only and web quick starts, and
+  focused architecture, API, security, deployment, and development guides.
+- Updated the contributor harness with unified-graph invariants, current
+  dependency boundaries, and frontend validation commands.
 - Documented the unified graph, live visualization, optional FAQ branch,
   simulated status evidence, routing context, and a path to real monitoring
   integrations.
