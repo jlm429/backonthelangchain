@@ -8,6 +8,7 @@ import {
   GraphDescription,
   NodeExecution,
   applyExecutionEvent,
+  graphMatchesOptions,
   initialNodeExecutions,
   isGraphDescription,
   parseSseBuffer,
@@ -363,6 +364,9 @@ export default function Home() {
     const controller = new AbortController();
     async function loadGraph() {
       setGraphLoading(true);
+      setGraph(null);
+      setExecutions({});
+      setResult(null);
       try {
         const response = await fetch(
           `/backend/support/graph?faq_retrieval=${faqRetrieval}`,
@@ -373,7 +377,6 @@ export default function Home() {
         if (!isGraphDescription(payload)) throw new Error("invalid graph response");
         setGraph(payload);
         setExecutions(initialNodeExecutions(payload));
-        setResult(null);
         setError(null);
       } catch (requestError) {
         if (requestError instanceof DOMException && requestError.name === "AbortError") return;
@@ -411,7 +414,11 @@ export default function Home() {
   async function runSupportGraph(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalizedQuery = query.trim();
-    if (!graph || !normalizedQuery || normalizedQuery.length > MAX_QUERY_LENGTH) {
+    if (!graphMatchesOptions(graph, faqRetrieval)) {
+      setError("The backend graph is unavailable. Confirm that FastAPI is running.");
+      return;
+    }
+    if (!normalizedQuery || normalizedQuery.length > MAX_QUERY_LENGTH) {
       setError("Enter a query between 1 and 2,000 characters.");
       return;
     }
@@ -507,7 +514,16 @@ export default function Home() {
             ))}
           </div>
           <div className="run-row">
-            <button className="run-button" type="submit" disabled={running || graphLoading || !query.trim()}>
+            <button
+              className="run-button"
+              type="submit"
+              disabled={
+                running ||
+                graphLoading ||
+                !graphMatchesOptions(graph, faqRetrieval) ||
+                !query.trim()
+              }
+            >
               {running ? <><span className="spinner" /> Streaming execution</> : <>Run support graph <span>→</span></>}
             </button>
             <p>Only application events and structured outputs are shown.</p>

@@ -5,6 +5,7 @@ logic lives in services/ so it can be tested and reused outside these graphs.
 """
 
 import json
+from pathlib import Path
 
 from backonthelangchain.agents.schemas import (
     JevRouteNodeName,
@@ -221,7 +222,7 @@ def make_faq_retrieval_node(rag_pipeline):
                 {
                     "chunk_id": item.chunk_id,
                     "title": item.metadata.get("title"),
-                    "source": item.source,
+                    "source": Path(item.source).name,
                     "retrieval_score": item.retrieval_score,
                     "rerank_score": item.rerank_score,
                 }

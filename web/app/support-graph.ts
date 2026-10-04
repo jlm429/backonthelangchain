@@ -71,6 +71,13 @@ export function initialNodeExecutions(
   );
 }
 
+export function graphMatchesOptions(
+  graph: GraphDescription | null,
+  faqRetrieval: boolean,
+): graph is GraphDescription {
+  return graph?.options.faq_retrieval === faqRetrieval;
+}
+
 export function applyExecutionEvent(
   current: Record<string, NodeExecution>,
   event: ExecutionEvent,

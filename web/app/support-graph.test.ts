@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyExecutionEvent,
+  graphMatchesOptions,
   initialNodeExecutions,
   isGraphDescription,
   parseSseBuffer,
@@ -41,6 +42,12 @@ test("keeps disabled backend stages visually distinct", () => {
 
   assert.equal(executions.safety_check.status, "waiting");
   assert.equal(executions.faq_retrieval.status, "disabled");
+});
+
+test("rejects a graph description for stale options", () => {
+  assert.equal(graphMatchesOptions(graph, false), true);
+  assert.equal(graphMatchesOptions(graph, true), false);
+  assert.equal(graphMatchesOptions(null, false), false);
 });
 
 test("applies actual node lifecycle events", () => {

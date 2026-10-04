@@ -162,6 +162,9 @@ def test_empty_and_oversized_queries_are_rejected_without_echoing_input():
     assert oversized_response.status_code == 422
     assert oversized not in oversized_response.text
     assert oversized_response.json()["error"]["code"] == "invalid_request"
+    assert empty_response.json()["error"]["message"] == (
+        "The request contains invalid or missing fields."
+    )
 
 
 def test_oversized_request_body_is_rejected_before_validation():
@@ -328,6 +331,20 @@ def test_support_graph_endpoint_serializes_real_enabled_shape():
     }
 
 
+def test_support_graph_endpoint_returns_generic_query_validation_error():
+    client = make_client(successful_handler)
+
+    response = client.get("/api/support/graph?faq_retrieval=not-a-boolean")
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "error": {
+            "code": "invalid_request",
+            "message": "The request contains invalid or missing fields.",
+        }
+    }
+
+
 def test_support_endpoint_streams_sse_and_validated_context():
     runner = FakeSupportRunner()
     client = make_client(successful_handler, support_runner=runner)
@@ -374,6 +391,9 @@ def test_support_endpoint_requires_all_simulated_status_selections():
 
     assert missing_status.status_code == 422
     assert partial_status.status_code == 422
+    assert missing_status.json()["error"]["message"] == (
+        "The request contains invalid or missing fields."
+    )
     assert runner.requests == []
 
 
@@ -400,4 +420,7 @@ def test_required_nodes_cannot_be_disabled_by_run_payload():
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "invalid_request"
+    assert response.json()["error"]["message"] == (
+        "The request contains invalid or missing fields."
+    )
     assert runner.requests == []

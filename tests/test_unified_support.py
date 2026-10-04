@@ -96,7 +96,7 @@ class FakeRAGPipeline:
         source = SimpleNamespace(
             chunk_id="faq-1",
             metadata={"title": "Login help"},
-            source="fake-faq.md",
+            source="/srv/backonthelangchain/data/fake-faq.md",
             retrieval_score=0.9,
             rerank_score=None,
         )
@@ -126,16 +126,24 @@ def make_graph_factory(*, safety=None, jev=None, tech=None, rag=None):
     return factory, safety, jev, tech, rag
 
 
-def request(*, retrieval=False, status="operational", query="Login is down"):
+def request(
+    *,
+    retrieval=False,
+    status="operational",
+    status_system="authentication",
+    query="Login is down",
+):
+    statuses = {
+        "authentication": "operational",
+        "billing": "operational",
+        "checkout": "operational",
+        "api": "operational",
+    }
+    statuses[status_system] = status
     return SupportRunRequest(
         query=query,
         options=SupportGraphOptions(faq_retrieval=retrieval),
-        simulated_status=SimulatedSystemState(
-            authentication=status,
-            billing="operational",
-            checkout="operational",
-            api="operational",
-        ),
+        simulated_status=SimulatedSystemState(**statuses),
     )
 
 
@@ -198,6 +206,9 @@ def test_optional_retrieval_is_executed_only_when_enabled():
     assert rag.queries == ["Login is down"]
     assert tech.calls[0][2] is None
     assert tech.calls[1][2] == "Use a recovery code."
+    enabled_result = completed_result(enabled_events)
+    assert enabled_result["retrieval"]["sources"][0]["source"] == "fake-faq.md"
+    assert "/srv/backonthelangchain" not in str(enabled_events)
 
 
 def test_mandatory_moderation_blocks_all_later_stages():
@@ -256,6 +267,28 @@ def test_reported_only_outage_is_distinct_from_corroborating_state():
 
     assert reported_only["reports"][0]["corroboration"] == "reported_only"
     assert corroborated["reports"][0]["corroboration"] == "corroborated_outage"
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Checkout is not down",
+        "There is no checkout outage",
+        "Checkout isn't unavailable",
+    ],
+)
+def test_negated_outage_language_does_not_create_evidence(query):
+    factory, _, jev, _, _ = make_graph_factory()
+
+    events = collect_events(
+        UnifiedSupportRunner(factory),
+        request(status="outage", status_system="checkout", query=query),
+    )
+
+    evidence = completed_result(events)["system_status"]["evidence"]
+    assert evidence["user_reported_problem"] is False
+    assert evidence["reports"] == []
+    assert jev.calls[0][1]["user_reported_problem"] is False
 
 
 def test_live_events_use_graph_node_ids_and_preserve_actual_path():

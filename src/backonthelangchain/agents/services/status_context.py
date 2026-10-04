@@ -33,6 +33,20 @@ def _contains_phrase(text: str, phrase: str) -> bool:
     return re.search(rf"\b{re.escape(phrase)}\b", text) is not None
 
 
+def _contains_affirmative_outage_marker(text: str, marker: str) -> bool:
+    for match in re.finditer(rf"\b{re.escape(marker)}\b", text):
+        prefix = text[: match.start()]
+        if not re.search(
+            (
+                r"(?:\bno|\bnot|\bnever|\bwithout|\bisn't|\bisnt)\s+"
+                r"(?:(?:an?|the)\s+)?(?:[\w'-]+\s+){0,2}$"
+            ),
+            prefix,
+        ):
+            return True
+    return False
+
+
 def build_simulated_status_evidence(
     user_query: str,
     statuses: dict[SystemName, SystemStatusLevel],
@@ -40,7 +54,8 @@ def build_simulated_status_evidence(
     """Compare an outage report with explicitly simulated demo state."""
     normalized_query = user_query.casefold()
     reports_problem = any(
-        _contains_phrase(normalized_query, marker) for marker in OUTAGE_MARKERS
+        _contains_affirmative_outage_marker(normalized_query, marker)
+        for marker in OUTAGE_MARKERS
     )
     mentioned = [
         system

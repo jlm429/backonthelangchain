@@ -151,7 +151,7 @@ def create_app(
         return error_response(
             422,
             "invalid_request",
-            "Enter a query between 1 and 2000 characters.",
+            "The request contains invalid or missing fields.",
         )
 
     @app.exception_handler(Exception)
