@@ -7,6 +7,7 @@ import {
   ExecutionEvent,
   GraphDescription,
   NodeExecution,
+  StageEvidence,
   applyExecutionEvent,
   graphMatchesOptions,
   initialNodeExecutions,
@@ -23,6 +24,17 @@ type EvidenceReport = {
   user_reported_problem: boolean;
   simulated_status: StatusLevel | null;
   corroboration: string;
+  relation: string;
+};
+
+type RetrievedDocument = {
+  rank: number;
+  document_id: string;
+  title: string;
+  source: string;
+  retrieval_score: number | null;
+  rerank_score: number | null;
+  snippet: string;
 };
 
 type SupportResult = {
@@ -37,21 +49,64 @@ type SupportResult = {
     evidence: null | {
       reports: EvidenceReport[];
       user_reported_problem: boolean;
+      assessment: string;
+      relevant_services: Array<{
+        system: SystemName;
+        configured_status: StatusLevel;
+      }>;
     };
     notice: string;
   };
   routing: { destination: string; reason: string; used_fallback: boolean };
   jev: null | {
-    model: string | null;
+    decision_available: boolean;
+    model: string;
+    classified_route: string;
+    selected_route: string;
     route_confidence: number | null;
     route_probabilities: Record<string, number>;
+    route_confidence_threshold: number;
+    route_confidence_threshold_met: boolean | null;
     human_escalation_probability: number | null;
+    human_escalation_threshold: number;
+    human_escalation_threshold_met: boolean | null;
   };
   retrieval: {
     enabled: boolean;
     executed: boolean;
-    sources: Array<{ title?: string; source?: string }>;
+    query: string | null;
+    result_count: number;
+    supplied_document_count: number;
+    documents: RetrievedDocument[];
+    context_supplied_to_response: string | null;
   };
+  response_generation: {
+    inputs: Record<string, unknown>;
+    generated_response: string | Record<string, unknown>;
+    production: string;
+  };
+  execution_summary: {
+    headline: string;
+    facts: Array<{ category: string; text: string }>;
+  };
+  provenance: {
+    user_query: string;
+    simulated_statuses: Record<SystemName, StatusLevel>;
+    system_evidence_assessment: string;
+    jev_route: string;
+    retrieved_documents: string[];
+    human_escalation_triggered: boolean;
+    response_production: string;
+  };
+  stage_evidence: StageEvidence[];
+};
+
+type SampleScenario = {
+  label: string;
+  description: string;
+  query: string;
+  faqRetrieval?: boolean;
+  status?: Partial<Record<SystemName, StatusLevel>>;
 };
 
 const MAX_QUERY_LENGTH = 2000;
@@ -62,11 +117,70 @@ const SYSTEMS: Array<{ id: SystemName; label: string }> = [
   { id: "api", label: "API" },
 ];
 const STATUS_LEVELS: StatusLevel[] = ["operational", "degraded", "outage"];
-const SAMPLE_QUERIES = [
-  "I cannot log in after enabling MFA.",
-  "Checkout is down and blocking our customers.",
-  "I was charged twice for my subscription.",
-  "I have tried five times. Connect me to a human.",
+const DEFAULT_STATUSES: Record<SystemName, StatusLevel> = {
+  authentication: "operational",
+  billing: "operational",
+  checkout: "operational",
+  api: "operational",
+};
+const ACCOUNTING_QUERY =
+  "I restarted my accounting workstation and now the monthly report writer won't generate reports. What should I do?";
+const CHECKOUT_REPORT =
+  "Our checkout system is completely down and nobody can place an order.";
+const SAMPLE_SCENARIOS: SampleScenario[] = [
+  {
+    label: "Ordinary MFA issue",
+    description: "Technical support without an explicit handoff request.",
+    query: "I cannot log in after enabling MFA.",
+  },
+  {
+    label: "Repeated failure",
+    description: "Repeated attempts, but no explicit human request.",
+    query:
+      "I have reset my password five times, re-enrolled MFA twice, and I still cannot access my account. I have been locked out since yesterday.",
+  },
+  {
+    label: "Critical checkout impact",
+    description: "Business impact without an explicit human request.",
+    query:
+      "Our checkout system has been unavailable for 45 minutes and customers cannot place orders. We are actively losing sales.",
+    status: { checkout: "outage" },
+  },
+  {
+    label: "Explicit human request",
+    description: "A direct request to connect with a human.",
+    query:
+      "I have tried the troubleshooting steps several times and this still isn't working. Please connect me to a human.",
+  },
+  {
+    label: "Duplicate billing charge",
+    description: "A billing-domain route.",
+    query: "I was charged twice for my subscription this month.",
+  },
+  {
+    label: "Checkout report · Operational",
+    description: "Contradictory simulated evidence.",
+    query: CHECKOUT_REPORT,
+    status: { checkout: "operational" },
+  },
+  {
+    label: "Checkout report · Outage",
+    description: "Corroborating simulated evidence.",
+    query: CHECKOUT_REPORT,
+    status: { checkout: "outage" },
+  },
+  {
+    label: "Accounting · RAG off",
+    description: "Generic context only.",
+    query: ACCOUNTING_QUERY,
+    faqRetrieval: false,
+  },
+  {
+    label: "Accounting · RAG on",
+    description: "Retrieve the fictional Acme procedure.",
+    query: ACCOUNTING_QUERY,
+    faqRetrieval: true,
+  },
 ];
 
 function formatLabel(value: string): string {
@@ -75,6 +189,11 @@ function formatLabel(value: string): string {
 
 function formatPercent(value: number | null): string {
   return value === null ? "Not available" : `${Math.round(value * 100)}%`;
+}
+
+function formatThresholdResult(value: boolean | null): string {
+  if (value === null) return "Unknown";
+  return value ? "Threshold met" : "Below threshold";
 }
 
 function safeErrorMessage(status: number): string {
@@ -95,7 +214,12 @@ function isSupportResult(value: unknown): value is SupportResult {
     typeof result.system_status === "object" &&
     result.system_status !== null &&
     typeof result.routing === "object" &&
-    result.routing !== null
+    result.routing !== null &&
+    typeof result.execution_summary === "object" &&
+    result.execution_summary !== null &&
+    typeof result.provenance === "object" &&
+    result.provenance !== null &&
+    Array.isArray(result.stage_evidence)
   );
 }
 
@@ -110,6 +234,55 @@ function Answer({ value }: { value: SupportResult["answer"] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function EvidenceFields({ value }: { value: Record<string, unknown> }) {
+  return (
+    <dl className="evidence-fields">
+      {Object.entries(value).map(([key, fieldValue]) => {
+        const isStructured = typeof fieldValue === "object" && fieldValue !== null;
+        return (
+          <div key={key}>
+            <dt>{formatLabel(key)}</dt>
+            <dd>
+              {isStructured ? (
+                <pre>{JSON.stringify(fieldValue, null, 2)}</pre>
+              ) : fieldValue === null || fieldValue === undefined ? (
+                "Not available"
+              ) : (
+                String(fieldValue)
+              )}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
+function StageInspector({ evidence }: { evidence: StageEvidence }) {
+  return (
+    <section className="stage-inspector" aria-labelledby="stage-inspector-title">
+      <div className="inspector-heading">
+        <div>
+          <span className="kicker">Selected stage contribution</span>
+          <h3 id="stage-inspector-title">{evidence.label}</h3>
+        </div>
+        <code>{evidence.stage_id}</code>
+      </div>
+      <p>{evidence.summary}</p>
+      <div className="inspector-columns">
+        <section>
+          <h4>Application inputs</h4>
+          <EvidenceFields value={evidence.inputs} />
+        </section>
+        <section>
+          <h4>Application outputs</h4>
+          <EvidenceFields value={evidence.outputs} />
+        </section>
+      </div>
+    </section>
   );
 }
 
@@ -155,10 +328,12 @@ function StatusSimulator({ values, disabled, onChange }: {
   );
 }
 
-function GraphView({ graph, executions, loading }: {
+function GraphView({ graph, executions, loading, selectedNodeId, onSelect }: {
   graph: GraphDescription | null;
   executions: Record<string, NodeExecution>;
   loading: boolean;
+  selectedNodeId: string | null;
+  onSelect: (nodeId: string) => void;
 }) {
   const stages = useMemo(() => {
     if (!graph) return [];
@@ -171,6 +346,9 @@ function GraphView({ graph, executions, loading }: {
     () => new Map(graph?.nodes.map((node) => [node.id, node.label]) ?? []),
     [graph],
   );
+  const selectedEvidence = selectedNodeId
+    ? executions[selectedNodeId]?.evidence
+    : undefined;
 
   return (
     <section className="graph-card" aria-labelledby="graph-title" aria-busy={loading}>
@@ -199,22 +377,27 @@ function GraphView({ graph, executions, loading }: {
                     };
                     return (
                       <article
-                        className={`graph-node node-${execution.status} node-${node.kind}`}
+                        className={`graph-node node-${execution.status} node-${node.kind} ${selectedNodeId === node.id ? "node-selected" : ""}`}
                         key={node.id}
                         role="listitem"
                       >
-                        <div className="node-topline">
-                          <span className="node-state">{execution.status}</span>
-                          <span>{node.required ? "required" : "optional"}</span>
-                        </div>
-                        <strong>{node.label}</strong>
-                        <p>{node.description}</p>
-                        {execution.output && Object.keys(execution.output).length > 0 && (
-                          <details>
-                            <summary>Stage output</summary>
-                            <pre>{JSON.stringify(execution.output, null, 2)}</pre>
-                          </details>
-                        )}
+                        <button
+                          className="node-select"
+                          type="button"
+                          disabled={execution.status !== "completed" || !execution.evidence}
+                          aria-pressed={selectedNodeId === node.id}
+                          onClick={() => onSelect(node.id)}
+                        >
+                          <span className="node-topline">
+                            <span className="node-state">{execution.status}</span>
+                            <span>{node.required ? "required" : "optional"}</span>
+                          </span>
+                          <strong>{node.label}</strong>
+                          <span className="node-description">{node.description}</span>
+                          {execution.status === "completed" && execution.evidence && (
+                            <span className="inspect-label">Inspect contribution →</span>
+                          )}
+                        </button>
                       </article>
                     );
                   })}
@@ -222,6 +405,7 @@ function GraphView({ graph, executions, loading }: {
               </div>
             ))}
           </div>
+          {selectedEvidence && <StageInspector evidence={selectedEvidence} />}
           <section className="edge-map" aria-labelledby="edge-map-title">
             <div className="edge-map-heading">
               <span className="kicker">Backend-serialized connections</span>
@@ -253,9 +437,32 @@ function ResultView({ result }: { result: SupportResult }) {
         <span>{formatLabel(result.outcome)}</span>
         <small>{formatLabel(result.routing.destination)}</small>
       </div>
+      <section className="summary-card">
+        <span className="card-kicker">What happened?</span>
+        <strong>{result.execution_summary.headline}</strong>
+        <ol>
+          {result.execution_summary.facts.map((fact) => (
+            <li key={fact.category}>
+              <span>{formatLabel(fact.category)}</span>
+              <p>{fact.text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
       <section className="answer-card">
         <span className="card-kicker">Response</span>
         <Answer value={result.answer} />
+      </section>
+      <section className="provenance-card">
+        <span className="card-kicker">Final result provenance</span>
+        <dl>
+          <div><dt>User query</dt><dd>{result.provenance.user_query}</dd></div>
+          <div><dt>System evidence</dt><dd>{formatLabel(result.provenance.system_evidence_assessment)}</dd></div>
+          <div><dt>Jev classified route</dt><dd>{formatLabel(result.provenance.jev_route)}</dd></div>
+          <div><dt>Retrieved documents</dt><dd>{result.provenance.retrieved_documents.join(", ") || "None"}</dd></div>
+          <div><dt>Human escalation</dt><dd>{result.provenance.human_escalation_triggered ? "Triggered" : "Not triggered"}</dd></div>
+          <div><dt>Response production</dt><dd>{formatLabel(result.provenance.response_production)}</dd></div>
+        </dl>
       </section>
       <div className="decision-grid">
         <section className="decision-card">
@@ -275,7 +482,11 @@ function ResultView({ result }: { result: SupportResult }) {
         <div className="evidence-heading">
           <div>
             <span className="card-kicker">Simulated status evidence</span>
-            <strong>{result.system_status.evaluated ? "Evaluated" : "Not reached"}</strong>
+            <strong>
+              {result.system_status.evaluated
+                ? formatLabel(result.system_status.evidence?.assessment ?? "unknown")
+                : "Not reached"}
+            </strong>
           </div>
           <span>Demo only</span>
         </div>
@@ -295,7 +506,7 @@ function ResultView({ result }: { result: SupportResult }) {
                 <strong>{formatLabel(report.system)}</strong>
                 <span>User report: problem</span>
                 <span>Simulated signal: {report.simulated_status ?? "none"}</span>
-                <b>{formatLabel(report.corroboration)}</b>
+                <b>{formatLabel(report.relation)}</b>
               </li>
             ))}
           </ul>
@@ -307,13 +518,18 @@ function ResultView({ result }: { result: SupportResult }) {
           <div className="evidence-heading">
             <div>
               <span className="card-kicker">Jev decision</span>
-              <strong>{result.jev.model ?? "Model unavailable"}</strong>
+              <strong>{result.jev.model}</strong>
             </div>
             <span>{result.routing.used_fallback ? "Fallback used" : "Direct route"}</span>
           </div>
           <div className="metric-row">
             <div><span>Route confidence</span><strong>{formatPercent(result.jev.route_confidence)}</strong></div>
             <div><span>Human escalation</span><strong>{formatPercent(result.jev.human_escalation_probability)}</strong></div>
+            <div><span>Route threshold · {formatPercent(result.jev.route_confidence_threshold)}</span><strong>{formatThresholdResult(result.jev.route_confidence_threshold_met)}</strong></div>
+            <div><span>Escalation threshold · {formatPercent(result.jev.human_escalation_threshold)}</span><strong>{formatThresholdResult(result.jev.human_escalation_threshold_met)}</strong></div>
+          </div>
+          <div className="jev-observations">
+            <span>Classified route: <strong>{formatLabel(result.jev.classified_route)}</strong></span>
           </div>
           <div className="probabilities">
             {Object.entries(result.jev.route_probabilities).map(([route, probability]) => (
@@ -327,14 +543,34 @@ function ResultView({ result }: { result: SupportResult }) {
         </section>
       )}
       <section className="retrieval-summary">
-        <span className="card-kicker">Optional FAQ retrieval</span>
+        <span className="card-kicker">Optional demo knowledge RAG</span>
         <strong>
           {result.retrieval.executed
-            ? `${result.retrieval.sources.length} source(s) retrieved`
+            ? `${result.retrieval.supplied_document_count} document(s) supplied from ${result.retrieval.result_count} result(s)`
             : result.retrieval.enabled
               ? "Enabled, branch not taken"
               : "Disabled"}
         </strong>
+        {result.retrieval.executed && (
+          <>
+            <p>Query: {result.retrieval.query}</p>
+            <ol className="retrieved-documents">
+              {result.retrieval.documents.map((document) => (
+                <li key={document.document_id}>
+                  <div><strong>{document.rank}. {document.title}</strong><code>{document.document_id}</code></div>
+                  <small>
+                    retrieval {document.retrieval_score?.toFixed(3) ?? "n/a"} · rerank {document.rerank_score?.toFixed(3) ?? "n/a"}
+                  </small>
+                  <p>{document.snippet}</p>
+                </li>
+              ))}
+            </ol>
+            <details className="supplied-context">
+              <summary>Exact knowledge supplied to response generation</summary>
+              <pre>{result.retrieval.context_supplied_to_response}</pre>
+            </details>
+          </>
+        )}
       </section>
       <details className="raw-json">
         <summary>Structured backend result <span>Application state only</span></summary>
@@ -347,14 +583,12 @@ function ResultView({ result }: { result: SupportResult }) {
 export default function Home() {
   const [graph, setGraph] = useState<GraphDescription | null>(null);
   const [executions, setExecutions] = useState<Record<string, NodeExecution>>({});
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [faqRetrieval, setFaqRetrieval] = useState(false);
   const [statuses, setStatuses] = useState<Record<SystemName, StatusLevel>>({
-    authentication: "operational",
-    billing: "operational",
-    checkout: "operational",
-    api: "operational",
+    ...DEFAULT_STATUSES,
   });
-  const [query, setQuery] = useState(SAMPLE_QUERIES[0]);
+  const [query, setQuery] = useState(SAMPLE_SCENARIOS[0].query);
   const [result, setResult] = useState<SupportResult | null>(null);
   const [graphLoading, setGraphLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -367,6 +601,7 @@ export default function Home() {
       setGraphLoading(true);
       setGraph(null);
       setExecutions({});
+      setSelectedNodeId(null);
       setResult(null);
       try {
         const response = await fetch(
@@ -394,23 +629,32 @@ export default function Home() {
     setStatuses((current) => ({ ...current, [system]: level }));
     setResult(null);
     setExecutions(graph ? initialNodeExecutions(graph) : {});
+    setSelectedNodeId(null);
   }
 
   function updateQuery(nextQuery: string) {
     setQuery(nextQuery);
     setResult(null);
     setExecutions(graph ? initialNodeExecutions(graph) : {});
+    setSelectedNodeId(null);
     setError(null);
   }
 
-  function chooseSample(sample: string) {
-    updateQuery(sample);
+  function chooseSample(sample: SampleScenario) {
+    setStatuses({ ...DEFAULT_STATUSES, ...sample.status });
+    setFaqRetrieval(sample.faqRetrieval ?? false);
+    updateQuery(sample.query);
     queryRef.current?.focus();
   }
 
   function handleEvent(event: ExecutionEvent) {
     setExecutions((current) => applyExecutionEvent(current, event));
+    if (event.type === "run_started" && event.evidence) setSelectedNodeId("__start__");
+    if (event.type === "node_completed" && event.node_id && event.evidence) {
+      setSelectedNodeId(event.node_id);
+    }
     if (event.type === "run_completed") {
+      if (event.evidence) setSelectedNodeId("__end__");
       if (isSupportResult(event.result)) setResult(event.result);
       else setError("The backend returned an unexpected final result.");
     }
@@ -434,6 +678,7 @@ export default function Home() {
     setError(null);
     setResult(null);
     setExecutions(initialNodeExecutions(graph));
+    setSelectedNodeId(null);
     let receivedTerminalEvent = false;
     try {
       const response = await fetch("/backend/support/run", {
@@ -485,12 +730,12 @@ export default function Home() {
     <main>
       <header className="hero">
         <div>
-          <div className="eyebrow"><span /> Live LangGraph support lab</div>
-          <h1>See the support system think in states.</h1>
+          <div className="eyebrow"><span /> Observable support prototype</div>
+          <h1>Inspect every support decision.</h1>
         </div>
         <p>
-          One end-to-end workflow for safe intake, simulated operational evidence,
-          Jev routing, optional retrieval, and response or escalation.
+          Follow structured application evidence through safety, simulated system
+          state, Jev routing, optional demo knowledge, and response or escalation.
         </p>
       </header>
       <StatusSimulator values={statuses} disabled={running} onChange={updateStatus} />
@@ -506,11 +751,17 @@ export default function Home() {
             disabled={running}
             onChange={(event) => setFaqRetrieval(event.target.checked)}
           />
-          <span>Enable Tier 1 FAQ retrieval</span>
+          <span>Enable demo knowledge RAG</span>
         </label>
         <span className="locked-control">OpenAI Moderation · always required</span>
       </div>
-      <GraphView graph={graph} executions={executions} loading={graphLoading} />
+      <GraphView
+        graph={graph}
+        executions={executions}
+        loading={graphLoading}
+        selectedNodeId={selectedNodeId}
+        onSelect={setSelectedNodeId}
+      />
       <section className="execution-workspace" aria-label="Support graph execution">
         <form className="query-panel" onSubmit={runSupportGraph}>
           <div className="panel-heading">
@@ -527,9 +778,12 @@ export default function Home() {
             disabled={running}
             onChange={(event) => updateQuery(event.target.value)}
           />
-          <div className="samples" aria-label="Sample support queries">
-            {SAMPLE_QUERIES.map((sample) => (
-              <button type="button" key={sample} disabled={running} onClick={() => chooseSample(sample)}>{sample}</button>
+          <div className="samples" aria-label="Sample support scenarios">
+            {SAMPLE_SCENARIOS.map((sample) => (
+              <button type="button" key={sample.label} disabled={running} onClick={() => chooseSample(sample)}>
+                <strong>{sample.label}</strong>
+                <span>{sample.description}</span>
+              </button>
             ))}
           </div>
           <div className="run-row">

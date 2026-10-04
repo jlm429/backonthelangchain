@@ -4,14 +4,16 @@
 
 # backonthelangchain
 
-`backonthelangchain` is a teaching repository for practical LLM application
-patterns. It combines LangGraph workflows, safety gates, model-based routing,
-optional RAG, a FastAPI streaming API, and a Next.js graph viewer in one
-support-system example.
+`backonthelangchain` is an observable prototype of a combined AI support flow.
+It connects mandatory safety, simulated system evidence, fast classification,
+retrieval, response generation, escalation, and LangGraph orchestration in one
+inspectable application.
 
-Use the focused Python scripts to learn one pattern at a time, or run the web
-application to watch the unified support graph execute. This is an
-experimentation project, not a production-ready support service.
+The repository remains useful for learning System 1-style classifiers and
+routers, System 2-style response generation, and RAG. The unified application
+is organized like a real support workflow so a run can be tested and debugged
+from its structured inputs, decisions, evidence, route, and output. It is a
+prototype, not a production-ready support service.
 
 ## Python-only quick start
 
@@ -42,9 +44,10 @@ Other terminal examples add Jev routing or RAG. See
 
 ## Web frontend quick start
 
-The web application visualizes the full support graph and streams live node
-status from the Python backend. In addition to the Python requirements, install
-Node.js 20.9 or newer and npm.
+The web application visualizes the full support graph, streams live node state,
+and lets you select each completed node to inspect its application-level
+contribution. In addition to the Python requirements, install Node.js 20.9 or
+newer and npm.
 
 Install the backend with the Jev integration:
 
@@ -85,19 +88,60 @@ starting the backend:
 poetry install -E jev -E rag
 ```
 
-The FAQ stage uses OpenAI embeddings and runs only for technical requests when
-the option is enabled in the interface.
+The retrieval stage uses OpenAI embeddings and runs only for technical requests
+when the option is enabled in the interface. Its bundled documents are clearly
+labeled fictional demo knowledge.
+
+## Compare observable scenarios
+
+The interface includes scenarios for ordinary MFA support, repeated failed
+attempts, business-critical checkout impact, an explicit human request, a
+duplicate billing charge, and a reported checkout outage. The two checkout
+samples configure the same report against Operational and Outage demo state so
+the system evidence and Jev score can be compared without forcing a result.
+Set a relevant service to Operational, Degraded, and Outage in turn to compare
+contradicted, partially corroborated, and corroborated evidence.
+
+The accounting workstation sample is a direct RAG A/B comparison. Run it with
+RAG off to give response generation only generic support context. Run it with
+RAG on to retrieve the fictional **Accounting Workstation Recovery** document,
+which supplies the organization-specific Acme Report Writer procedure. The
+procedure is not embedded in the response prompt or application routing logic.
+
+For escalation, compare ordinary failure, repeated failure, critical business
+impact, and the explicit human request. The UI shows Jev's escalation
+probability, the configured `0.80` threshold, and whether it was met. Jev
+remains authoritative for escalation.
 
 ## What the unified example demonstrates
 
-- mandatory OpenAI Moderation before provider-backed routing or responses
-- simulated system-status evidence for authentication, billing, checkout, and
-  API incidents
-- Jev routing and human-escalation scoring with an OpenAI fallback
-- technical and structured billing responses
-- optional OpenAI embedding and FAISS retrieval over a bundled Tier 1 FAQ
-- a graph description generated from the executable LangGraph definition
-- safe Server-Sent Events that expose application state, not hidden reasoning
+- **OpenAI Moderation** is mandatory and authoritative before routing or
+  response generation.
+- **Simulated system and tool evidence** records configured service state and
+  whether the user's report is corroborated, contradicted, partially
+  corroborated, mixed across services, or not applicable. It is demo evidence,
+  not monitoring data.
+- **Jev** is the routing and escalation classifier. The application exposes its
+  route confidence, route probabilities, escalation probability, thresholds,
+  fallback use, and threshold results without substituting a desired outcome.
+- **RAG** optionally retrieves from distinct fictional organization procedures
+  for accounting workstations, VPN certificates, warehouse scanners, and
+  meeting room displays. Ranked documents, scores, snippets, and the exact
+  supplied context are visible.
+- **The response-generation LLM** receives allowlisted application context:
+  the query, selected route, system evidence, retrieved knowledge, and
+  escalation state. Its generated response is recorded as the stage output.
+- **LangGraph** remains the orchestrator and the executable source of truth for
+  the graph description, execution path, and streamed node ids.
+- **Human escalation** occurs only when Jev's escalation score meets the
+  configured threshold. Repeated failure or critical impact may still score
+  below it, and that limitation remains visible.
+
+Every completed run includes a deterministic "What happened?" summary and
+final-result provenance. Both are derived from structured stage evidence. No
+model is asked to explain its hidden reasoning, and the API never exposes
+prompts, chain-of-thought, raw provider objects, credentials, request headers,
+private reasoning tokens, stack traces, or sensitive internal errors.
 
 The focused command-line examples remain independent teaching paths. The web
 application centers the unified graph and does not present an example catalog.

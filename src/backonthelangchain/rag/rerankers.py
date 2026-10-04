@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
-
-import voyageai
+from typing import Any, Protocol
 
 from backonthelangchain.rag.retrieval import RetrievedChunk
 
@@ -67,8 +65,10 @@ class VoyageReranker:
     """
 
     def __init__(self, *, model: str = "rerank-2.5"):
+        import voyageai
+
         self.model = model
-        self.client = voyageai.Client()
+        self.client: Any = voyageai.Client()
 
     def rerank(
         self,

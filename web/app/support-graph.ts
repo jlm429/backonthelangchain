@@ -29,10 +29,19 @@ export type GraphDescription = {
   edges: GraphEdge[];
 };
 
+export type StageEvidence = {
+  stage_id: string;
+  label: string;
+  summary: string;
+  inputs: Record<string, unknown>;
+  outputs: Record<string, unknown>;
+};
+
 export type ExecutionEvent = {
   type: string;
   node_id?: string;
   output?: Record<string, unknown>;
+  evidence?: StageEvidence | null;
   message?: string;
   result?: Record<string, unknown>;
 };
@@ -40,6 +49,7 @@ export type ExecutionEvent = {
 export type NodeExecution = {
   status: NodeExecutionStatus;
   output?: Record<string, unknown>;
+  evidence?: StageEvidence;
 };
 
 export function isGraphDescription(value: unknown): value is GraphDescription {
@@ -87,10 +97,22 @@ export function applyExecutionEvent(
   event: ExecutionEvent,
 ): Record<string, NodeExecution> {
   if (event.type === "run_started" && current.__start__) {
-    return { ...current, __start__: { status: "completed" } };
+    return {
+      ...current,
+      __start__: {
+        status: "completed",
+        ...(event.evidence ? { evidence: event.evidence } : {}),
+      },
+    };
   }
   if (event.type === "run_completed" && current.__end__) {
-    return { ...current, __end__: { status: "completed" } };
+    return {
+      ...current,
+      __end__: {
+        status: "completed",
+        ...(event.evidence ? { evidence: event.evidence } : {}),
+      },
+    };
   }
   if (!event.node_id || !current[event.node_id]) return current;
   if (event.type === "node_started") {
@@ -102,7 +124,11 @@ export function applyExecutionEvent(
   if (event.type === "node_completed") {
     return {
       ...current,
-      [event.node_id]: { status: "completed", output: event.output },
+      [event.node_id]: {
+        status: "completed",
+        output: event.output,
+        ...(event.evidence ? { evidence: event.evidence } : {}),
+      },
     };
   }
   if (event.type === "node_failed") {

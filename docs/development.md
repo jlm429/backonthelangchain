@@ -47,7 +47,24 @@ poetry run python examples/run_safe_jev_support_router.py \
 ```
 
 These scripts are focused teaching tools. The web application uses the unified
-graph described in [Architecture](architecture.md).
+observable support prototype described in [Architecture](architecture.md).
+
+## Web scenario comparisons
+
+The browser includes paired scenarios intended for repeatable inspection:
+
+- run Accounting with RAG off and on to compare generic context with the
+  retrieved fictional Acme procedure
+- run the same checkout-down report with Checkout set to Operational and Outage
+  to compare contradictory and corroborating system evidence
+- compare ordinary MFA failure, repeated failure, business-critical impact, and
+  an explicit human request against Jev's visible `0.80` escalation threshold
+
+The default demo knowledge is under
+`src/backonthelangchain/rag/data/demo_support_knowledge/`. Keep these documents
+fictional, organization-specific, small, and clearly labeled as demo content.
+Do not copy their answers into prompts or routing code. Retrieval must be the
+mechanism that supplies those details to response generation.
 
 ## Repository map
 
@@ -101,4 +118,5 @@ the service and route.
 For unified graph changes, keep the executable graph builder authoritative.
 Derive graph descriptions from the compiled graph, preserve stable node ids
 across backend events and frontend state, and allowlist only safe application
-outputs in streamed events.
+outputs in streamed events. Add behavior tests that assert evidence propagation
+and influence, not only endpoint success.
