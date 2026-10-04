@@ -15,8 +15,9 @@ experimentation project, not a production-ready support service.
 
 ## Python-only quick start
 
-Yes, the project works without the GUI, Node.js, or FastAPI. The shortest path
-runs the safety-gated support router from a terminal.
+Yes, the project works without the GUI or a running FastAPI server, and the
+command-line examples do not require Node.js. The shortest path runs the
+safety-gated support router from a terminal.
 
 Requirements: Python 3.10 through 3.13, Poetry, and an OpenAI API key.
 
