@@ -32,6 +32,13 @@ COMPONENT_CONNECTOR = re.compile(
     r"\s*(?:(?:,|\band\b|\bor\b|\bnor\b|\bas well as\b)\s*)+"
 )
 PREDICATE_CONJUNCTION = re.compile(r"(?:,\s*)?\b(?:and|or)\b")
+COORDINATED_NEGATION = re.compile(r"\bneither\b[^.!?;]*\bnor\b[^.!?;]*$")
+NEGATION_PREFIX = re.compile(
+    r"(?:\bno|\bnot|\bnever|\bwithout|\bisn't|\bisnt|"
+    r"\baren't|\barent|\bwasn't|\bwasnt|\bweren't|\bwerent|"
+    r"\bdoesn't|\bdoesnt|\bdon't|\bdont|\bdidn't|\bdidnt)\s+"
+    r"(?:(?:an?|the)\s+)?(?:[\w'-]+\s+){0,4}$"
+)
 
 
 def _is_negated(text: str, marker_start: int) -> bool:
@@ -39,25 +46,18 @@ def _is_negated(text: str, marker_start: int) -> bool:
     negation_scope = prefix
     for conjunction in PREDICATE_CONJUNCTION.finditer(prefix):
         preceding_text = prefix[: conjunction.start()]
-        if any(
-            re.search(rf"\b{re.escape(marker)}\b", preceding_text)
-            for marker in OUTAGE_MARKERS
+        if (
+            any(
+                re.search(rf"\b{re.escape(marker)}\b", preceding_text)
+                for marker in OUTAGE_MARKERS
+            )
+            or COORDINATED_NEGATION.search(preceding_text)
+            or NEGATION_PREFIX.search(preceding_text)
         ):
             negation_scope = prefix[conjunction.end() :]
     return bool(
-        re.search(
-            r"\bneither\b[^.!?;]*\bnor\b[^.!?;]*$",
-            negation_scope,
-        )
-        or re.search(
-            (
-                r"(?:\bno|\bnot|\bnever|\bwithout|\bisn't|\bisnt|"
-                r"\baren't|\barent|\bwasn't|\bwasnt|\bweren't|\bwerent|"
-                r"\bdoesn't|\bdoesnt|\bdon't|\bdont|\bdidn't|\bdidnt)\s+"
-                r"(?:(?:an?|the)\s+)?(?:[\w'-]+\s+){0,4}$"
-            ),
-            negation_scope,
-        )
+        COORDINATED_NEGATION.search(negation_scope)
+        or NEGATION_PREFIX.search(negation_scope)
     )
 
 

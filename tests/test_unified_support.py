@@ -353,6 +353,8 @@ def test_negated_outage_language_does_not_create_evidence(query):
 @pytest.mark.parametrize(
     "query",
     [
+        "Checkout is not operational and authentication is down",
+        "Billing doesn't work and authentication is down",
         "Checkout is not down and authentication is down",
         "Neither billing nor checkout is down and authentication is down",
         "Neither billing nor checkout is down, and authentication is down",
