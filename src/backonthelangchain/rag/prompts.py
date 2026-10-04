@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from backonthelangchain.rag.rerankers import RerankedChunk
 
 
@@ -15,7 +17,7 @@ def format_rag_context(chunks: list[RerankedChunk]) -> str:
 
     for index, chunk in enumerate(chunks, start=1):
         title = chunk.metadata.get("title", f"FAQ {index}")
-        source = chunk.metadata.get("source", chunk.source)
+        source = Path(chunk.metadata.get("source", chunk.source)).name
 
         blocks.append(
             "\n".join(

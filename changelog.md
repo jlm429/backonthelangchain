@@ -4,6 +4,14 @@
 
 ### Features
 
+- Added backend-authoritative stage evidence for every executed unified-graph
+  stage, selectable node inspection, deterministic execution summaries, and
+  final-result provenance.
+- Added visible Jev route and escalation thresholds, threshold results, and
+  observational explicit-human-request detection without overriding Jev.
+- Added fictional demo knowledge for accounting workstation recovery, VPN
+  certificate recovery, warehouse scanner synchronization, and meeting room
+  display recovery, plus paired RAG and system-evidence scenarios.
 - Unified the web application around one support graph: mandatory OpenAI
   Moderation, simulated status evidence, Jev with the existing fallback,
   optional FAQ retrieval, and response or escalation.
@@ -26,6 +34,9 @@
 
 ### Tests
 
+- Added deterministic fake-provider coverage for ordinary, repeated, critical,
+  explicit-human, billing, contradictory-status, and accounting RAG scenarios,
+  including evidence propagation, summary accuracy, and private-field omission.
 - Added fake-provider behavioral coverage for graph serialization, live events,
   executed branches, optional retrieval, non-disableable required nodes, all
   simulated status levels, Jev context, and outage corroboration semantics.
@@ -36,6 +47,9 @@
 
 ### Documentation
 
+- Repositioned the unified application as an observable support-flow prototype
+  and documented node evidence, scenario comparisons, demo knowledge,
+  deterministic summaries, provenance, and hidden-reasoning boundaries.
 - Added the project banner, concise Python-only and web quick starts, and
   focused architecture, API, security, deployment, and development guides.
 - Updated the contributor harness with unified-graph invariants, current

@@ -1,7 +1,7 @@
 [project]
 name = "backonthelangchain"
 version = "0.1.0"
-description = "Personal sandbox for RAG, agents, and LangGraph patterns."
+description = "Observable prototype for RAG, routing, safety, and LangGraph support flows."
 requires-python = ">=3.10,<3.14"
 dependencies = [
     "fastapi",

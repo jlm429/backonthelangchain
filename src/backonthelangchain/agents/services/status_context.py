@@ -111,9 +111,12 @@ def build_simulated_status_evidence(
     """Compare an outage report with explicitly simulated demo state."""
     normalized_query = user_query.casefold()
     reported_systems: set[SystemName] = set()
+    mentioned_systems: set[SystemName] = set()
     unspecified_report = False
     for clause in CLAUSE_BOUNDARY.split(normalized_query):
         groups = _component_groups(clause)
+        for _, _, systems in groups:
+            mentioned_systems.update(systems)
         for marker in _affirmative_marker_spans(clause):
             if not groups:
                 unspecified_report = True
@@ -129,6 +132,7 @@ def build_simulated_status_evidence(
                 "user_reported_problem": True,
                 "simulated_status": None,
                 "corroboration": "reported_only",
+                "relation": "not_applicable",
             }
         )
     for system in SYSTEM_ALIASES:
@@ -137,25 +141,45 @@ def build_simulated_status_evidence(
         simulated_status = statuses[system]
         if simulated_status == "outage":
             corroboration = "corroborated_outage"
+            relation = "corroborated"
         elif simulated_status == "degraded":
             corroboration = "partially_corroborated"
+            relation = "partially_corroborated"
         else:
             corroboration = "not_corroborated"
+            relation = "contradicted"
         reports.append(
             {
                 "system": system,
                 "user_reported_problem": True,
                 "simulated_status": simulated_status,
                 "corroboration": corroboration,
+                "relation": relation,
             }
         )
+
+    report_relations = {report["relation"] for report in reports}
+    if "corroborated" in report_relations:
+        assessment = "corroborated"
+    elif "partially_corroborated" in report_relations:
+        assessment = "partially_corroborated"
+    elif "contradicted" in report_relations:
+        assessment = "contradicted"
+    else:
+        assessment = "not_applicable"
 
     return {
         "source": "simulated_demo_state",
         "is_real_monitoring": False,
         "statuses": dict(statuses),
+        "relevant_services": [
+            {"system": system, "configured_status": statuses[system]}
+            for system in SYSTEM_ALIASES
+            if system in mentioned_systems
+        ],
         "user_reported_problem": bool(reports),
         "reports": reports,
+        "assessment": assessment,
         "notice": (
             "Demo evidence only. These values do not come from a monitoring service."
         ),

@@ -33,8 +33,12 @@ origins when the frontend is hosted separately.
 - CORS uses exact origins with safe local-development defaults.
 - Responses set no-store and basic browser hardening headers.
 - Validation and provider failures use opaque error messages.
-- Streamed events allowlist application fields and do not expose prompts, raw
-  SDK responses, stack traces, or hidden model reasoning.
+- Streamed events validate typed, application-owned stage evidence and do not
+  pass through provider objects. They exclude prompts, raw SDK responses,
+  configuration, authorization information, request headers, stack traces,
+  hidden model reasoning, and private reasoning tokens.
+- Execution summaries are deterministic transformations of stage evidence, not
+  model-generated explanations.
 - Automated tests use injected fake providers and make no paid calls.
 
 The simulated component status selected in the UI is demo input. It is not

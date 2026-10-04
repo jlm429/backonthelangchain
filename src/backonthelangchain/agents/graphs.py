@@ -107,8 +107,8 @@ UNIFIED_SUPPORT_NODE_METADATA: dict[str, dict[str, Any]] = {
         "stage": 2,
     },
     "simulated_status_context": {
-        "label": "Simulated status evidence",
-        "description": "Compares the user report with selected demo system state.",
+        "label": "Simulated Status",
+        "description": "Compares the report with configured demo service state.",
         "kind": "context",
         "required": True,
         "stage": 2,
@@ -122,7 +122,7 @@ UNIFIED_SUPPORT_NODE_METADATA: dict[str, dict[str, Any]] = {
     },
     "faq_retrieval": {
         "label": "Tier 1 FAQ retrieval",
-        "description": "Optional existing embedding and retrieval pipeline.",
+        "description": "Optional retrieval over fictional organization knowledge.",
         "kind": "retrieval",
         "required": False,
         "stage": 4,
@@ -136,7 +136,7 @@ UNIFIED_SUPPORT_NODE_METADATA: dict[str, dict[str, Any]] = {
     },
     "tech_support_answer": {
         "label": "Technical response",
-        "description": "Generates guidance from available status and FAQ context.",
+        "description": "Generates guidance from supplied status and RAG context.",
         "kind": "response",
         "required": True,
         "stage": 5,

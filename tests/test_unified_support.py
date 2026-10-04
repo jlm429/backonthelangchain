@@ -1,5 +1,8 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import json
+from pathlib import Path
+import re
 from threading import Barrier
 from time import sleep
 from types import SimpleNamespace
@@ -30,6 +33,14 @@ from backonthelangchain.examples.unified_support import (
     UnifiedSupportRunner,
     describe_unified_support_graph,
 )
+from backonthelangchain.rag.chunking import split_markdown_faqs
+from backonthelangchain.rag.loaders import load_text_file
+from backonthelangchain.rag.pipelines import (
+    TechSupportRAGPipeline,
+    load_support_knowledge_chunks,
+)
+from backonthelangchain.rag.rerankers import NoOpReranker
+from backonthelangchain.rag.retrieval import RetrievedChunk
 
 
 class FakeSafetyService:
@@ -48,16 +59,17 @@ class FakeSafetyService:
 
 
 class FakeJevService:
-    def __init__(self, *, route="tech_support", escalation=0.1):
+    def __init__(self, *, route="tech_support", escalation=0.1, confidence=0.9):
         self.route = route
         self.escalation = escalation
+        self.confidence = confidence
         self.calls = []
 
     def evaluate(self, query, *, context=None):
         self.calls.append((query, context))
         return JevSupportDecision(
             support_route=self.route,
-            support_route_confidence=0.9,
+            support_route_confidence=self.confidence,
             support_route_probabilities={
                 "tech_support": 0.9 if self.route == "tech_support" else 0.1,
                 "billing": 0.9 if self.route == "billing" else 0.1,
@@ -103,13 +115,117 @@ class FakeRAGPipeline:
             chunk_id="faq-1",
             metadata={"title": "Login help"},
             source="/srv/backonthelangchain/data/fake-faq.md",
+            text="Use a recovery code.",
             retrieval_score=0.9,
             rerank_score=None,
         )
         return SimpleNamespace(
+            query=query,
             context="Use a recovery code.",
+            retrieved_chunks=[source],
             reranked_chunks=[source],
         )
+
+
+class DeterministicScenarioJevService:
+    """Fake Jev outputs used to expose scores without forcing graph outcomes."""
+
+    def __init__(self):
+        self.calls = []
+
+    def evaluate(self, query, *, context=None):
+        self.calls.append((query, context))
+        normalized = query.casefold()
+        route = "billing" if "charged twice" in normalized else "tech_support"
+        confidence = 0.96 if route == "billing" else 0.93
+        escalation = 0.08
+        if "reset my password five times" in normalized:
+            escalation = 0.46
+        elif "actively losing sales" in normalized:
+            escalation = 0.68
+        elif "connect me to a human" in normalized:
+            escalation = 0.91
+        elif "completely down" in normalized:
+            assessment = context["assessment"] if context else "not_applicable"
+            escalation = 0.71 if assessment == "corroborated" else 0.32
+        return JevSupportDecision(
+            support_route=route,
+            support_route_confidence=confidence,
+            support_route_probabilities={
+                "tech_support": 1.0 - confidence if route == "billing" else confidence,
+                "billing": confidence if route == "billing" else 1.0 - confidence,
+            },
+            needs_human_escalation=escalation,
+            model="fake-jev-scenarios",
+        )
+
+
+class AccountingRAGPipeline:
+    def __init__(self):
+        self.queries = []
+
+    def run(self, query):
+        self.queries.append(query)
+        text = (
+            "## Accounting Workstation Recovery\n\n"
+            "Open Service Manager and restart the \"Acme Report Writer\" daemon. "
+            "Wait until its status reads READY, reopen Monthly Reporting, and "
+            "escalate to Accounting Platform Support if READY fails after two attempts."
+        )
+        source = SimpleNamespace(
+            chunk_id="accounting-demo-1",
+            metadata={"title": "Accounting Workstation Recovery"},
+            source="/private/repository/accounting_workstation_recovery.md",
+            text=text,
+            retrieval_score=0.97,
+            rerank_score=None,
+        )
+        context = (
+            "[FAQ 1] Accounting Workstation Recovery\n"
+            "Source: accounting_workstation_recovery.md\n"
+            "Chunk ID: accounting-demo-1\n"
+            f"{text}"
+        )
+        return SimpleNamespace(
+            query=query,
+            context=context,
+            retrieved_chunks=[source],
+            reranked_chunks=[source],
+        )
+
+
+class ContextAwareTechSupportService(FakeTechSupportService):
+    def answer(self, query, *, system_context=None, rag_context=None):
+        self.calls.append((query, system_context, rag_context))
+        if rag_context and "Acme Report Writer" in rag_context:
+            return (
+                "Restart the Acme Report Writer daemon in Service Manager, wait "
+                "for READY, and reopen Monthly Reporting. Escalate to Accounting "
+                "Platform Support if READY fails after two attempts.",
+                system_context,
+            )
+        return "Try generic workstation troubleshooting and contact support.", system_context
+
+
+class LexicalDemoRetriever:
+    """Dependency-free fake retriever over the real demo document chunks."""
+
+    def __init__(self, chunks):
+        self.chunks = chunks
+
+    def retrieve(self, query, *, top_k):
+        query_terms = set(re.findall(r"[a-z]+", query.casefold()))
+        scored = []
+        for chunk in self.chunks:
+            chunk_terms = set(re.findall(r"[a-z]+", chunk.text.casefold()))
+            overlap = len(query_terms & chunk_terms)
+            scored.append(
+                RetrievedChunk(
+                    chunk=chunk,
+                    score=overlap / max(len(query_terms), 1),
+                )
+            )
+        return sorted(scored, key=lambda item: item.score, reverse=True)[:top_k]
 
 
 def make_graph_factory(*, safety=None, jev=None, tech=None, rag=None):
@@ -213,7 +329,7 @@ def test_optional_retrieval_is_executed_only_when_enabled():
     assert tech.calls[0][2] is None
     assert tech.calls[1][2] == "Use a recovery code."
     enabled_result = completed_result(enabled_events)
-    assert enabled_result["retrieval"]["sources"][0]["source"] == "fake-faq.md"
+    assert enabled_result["retrieval"]["documents"][0]["source"] == "fake-faq.md"
     assert "/srv/backonthelangchain" not in str(enabled_events)
 
 
@@ -448,8 +564,17 @@ def test_live_events_use_graph_node_ids_and_preserve_actual_path():
         if event.get("type") == "node_completed"
         and event.get("node_id") == "simulated_status_context"
     )
-    assert status_event["output"]["status_evidence"]["user_reported_problem"] is True
-    assert set(status_event["output"]) == {"status_evidence"}
+    assert status_event["evidence"]["outputs"]["assessment"] == "contradicted"
+    assert status_event["evidence"]["outputs"]["reports"][0][
+        "user_reported_problem"
+    ] is True
+    assert set(status_event["evidence"]) == {
+        "stage_id",
+        "label",
+        "summary",
+        "inputs",
+        "outputs",
+    }
 
 
 @pytest.mark.parametrize(
@@ -511,3 +636,238 @@ def test_node_failure_is_streamed_without_provider_details():
     }
     assert events[-1]["type"] == "run_failed"
     assert "provider token" not in str(events)
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_route", "expected_outcome", "expected_score", "explicit"),
+    [
+        (
+            "I cannot log in after enabling MFA.",
+            "tech_support",
+            "completed",
+            0.08,
+            False,
+        ),
+        (
+            "I have reset my password five times, re-enrolled MFA twice, and I "
+            "still cannot access my account. I have been locked out since yesterday.",
+            "tech_support",
+            "completed",
+            0.46,
+            False,
+        ),
+        (
+            "Our checkout system has been unavailable for 45 minutes and customers "
+            "cannot place orders. We are actively losing sales.",
+            "tech_support",
+            "completed",
+            0.68,
+            False,
+        ),
+        (
+            "I have tried the troubleshooting steps several times and this still "
+            "isn't working. Please connect me to a human.",
+            "human_escalation",
+            "escalated",
+            0.91,
+            True,
+        ),
+        (
+            "I was charged twice for my subscription this month.",
+            "billing",
+            "completed",
+            0.08,
+            False,
+        ),
+    ],
+)
+def test_deterministic_jev_scenarios_expose_actual_scores_without_overrides(
+    query,
+    expected_route,
+    expected_outcome,
+    expected_score,
+    explicit,
+):
+    factory, _, _, _, _ = make_graph_factory(jev=DeterministicScenarioJevService())
+
+    result = completed_result(
+        collect_events(UnifiedSupportRunner(factory), request(query=query))
+    )
+
+    assert result["routing"]["destination"] == expected_route
+    assert result["outcome"] == expected_outcome
+    assert result["jev"]["human_escalation_probability"] == expected_score
+    assert result["jev"]["human_escalation_threshold"] == 0.8
+    assert result["jev"]["human_escalation_threshold_met"] is (
+        expected_score >= 0.8
+    )
+    assert result["jev"]["explicit_human_request_detected"] is explicit
+
+
+def test_reported_checkout_outage_exposes_contradictory_and_corroborating_evidence():
+    query = "Our checkout system is completely down and nobody can place an order."
+    jev = DeterministicScenarioJevService()
+    factory, _, _, _, _ = make_graph_factory(jev=jev)
+    runner = UnifiedSupportRunner(factory)
+
+    operational = completed_result(
+        collect_events(
+            runner,
+            request(query=query, status_system="checkout", status="operational"),
+        )
+    )
+    outage = completed_result(
+        collect_events(
+            runner,
+            request(query=query, status_system="checkout", status="outage"),
+        )
+    )
+
+    assert operational["system_status"]["evidence"]["assessment"] == "contradicted"
+    assert outage["system_status"]["evidence"]["assessment"] == "corroborated"
+    assert operational["jev"]["human_escalation_probability"] == 0.32
+    assert outage["jev"]["human_escalation_probability"] == 0.71
+    assert operational["outcome"] == outage["outcome"] == "completed"
+    assert operational["jev"]["human_escalation_threshold_met"] is False
+    assert outage["jev"]["human_escalation_threshold_met"] is False
+
+
+def test_accounting_rag_ab_changes_supplied_context_and_generated_response():
+    query = (
+        "I restarted my accounting workstation and now the monthly report writer "
+        "won't generate reports. What should I do?"
+    )
+    tech = ContextAwareTechSupportService()
+    rag = AccountingRAGPipeline()
+    factory, _, _, _, _ = make_graph_factory(tech=tech, rag=rag)
+    runner = UnifiedSupportRunner(factory)
+
+    without_rag = completed_result(
+        collect_events(runner, request(query=query, retrieval=False))
+    )
+    with_rag = completed_result(
+        collect_events(runner, request(query=query, retrieval=True))
+    )
+
+    assert "Acme Report Writer" not in without_rag["answer"]
+    assert without_rag["retrieval"]["context_supplied_to_response"] is None
+    assert with_rag["retrieval"]["documents"][0]["title"] == (
+        "Accounting Workstation Recovery"
+    )
+    assert with_rag["retrieval"]["documents"][0]["retrieval_score"] == 0.97
+    assert "Acme Report Writer" in with_rag["retrieval"][
+        "context_supplied_to_response"
+    ]
+    assert with_rag["response_generation"]["inputs"][
+        "retrieved_knowledge_supplied"
+    ] == with_rag["retrieval"]["context_supplied_to_response"]
+    assert "Acme Report Writer" in with_rag["answer"]
+    assert without_rag["answer"] != with_rag["answer"]
+
+
+def test_demo_knowledge_base_contains_distinct_fictional_procedures():
+    knowledge_directory = (
+        Path(__file__).parents[1]
+        / "src/backonthelangchain/rag/data/demo_support_knowledge"
+    )
+    chunks = [
+        chunk
+        for document_path in sorted(knowledge_directory.glob("*.md"))
+        for chunk in split_markdown_faqs(load_text_file(document_path))
+    ]
+
+    assert {chunk.metadata["title"] for chunk in chunks} == {
+        "Accounting Workstation Recovery",
+        "Field VPN Certificate Recovery",
+        "Warehouse Scanner Synchronization",
+        "Meeting Room Display Recovery",
+    }
+    accounting = next(
+        chunk for chunk in chunks if chunk.metadata["title"] == "Accounting Workstation Recovery"
+    )
+    assert "Acme Report Writer" in accounting.text
+    assert "READY" in accounting.text
+    assert "Accounting Platform Support" in accounting.text
+
+
+def test_deterministic_retrieval_selects_accounting_recovery_document():
+    knowledge_directory = (
+        Path(__file__).parents[1]
+        / "src/backonthelangchain/rag/data/demo_support_knowledge"
+    )
+    chunks = load_support_knowledge_chunks(knowledge_directory)
+    pipeline = TechSupportRAGPipeline(
+        faq_path=knowledge_directory,
+        embedding_model=object(),
+        retriever=LexicalDemoRetriever(chunks),
+        reranker=NoOpReranker(),
+        retrieve_top_k=4,
+        rerank_top_k=1,
+    )
+
+    result = pipeline.run(
+        "I restarted my accounting workstation and the monthly report writer "
+        "will not generate reports."
+    )
+
+    assert result.reranked_chunks[0].metadata["title"] == (
+        "Accounting Workstation Recovery"
+    )
+    assert "Acme Report Writer" in result.context
+    assert "accounting_workstation_recovery.md" in result.context
+    assert str(knowledge_directory) not in result.context
+
+
+def test_stage_evidence_and_summary_match_the_executed_graph_state():
+    factory, _, _, _, _ = make_graph_factory(jev=DeterministicScenarioJevService())
+    result = completed_result(
+        collect_events(
+            UnifiedSupportRunner(factory),
+            request(
+                query="Our checkout system is completely down and nobody can place an order.",
+                status_system="checkout",
+                status="outage",
+            ),
+        )
+    )
+
+    assert [item["stage_id"] for item in result["stage_evidence"]] == [
+        "__start__",
+        *result["execution_path"],
+        "__end__",
+    ]
+    summary_text = " ".join(
+        fact["text"] for fact in result["execution_summary"]["facts"]
+    )
+    assert "OpenAI Moderation allowed" in summary_text
+    assert "assessment was corroborated" in summary_text
+    assert "Escalation probability was 0.71" in summary_text
+    assert "0.80 escalation threshold was not met" in summary_text
+    assert "workflow outcome was completed at tech_support" in summary_text
+    assert result["provenance"]["human_escalation_triggered"] is False
+
+
+def test_public_evidence_omits_private_provider_fields_and_sensitive_errors():
+    sentinel = "private-provider-reasoning-and-secret-token"
+    safety = FakeSafetyService()
+    safety.private_reasoning = sentinel
+    jev = FakeJevService()
+    jev.raw_provider_response = {"authorization": sentinel}
+    tech = FakeTechSupportService()
+    tech.hidden_chain_of_thought = sentinel
+    factory, _, _, _, _ = make_graph_factory(safety=safety, jev=jev, tech=tech)
+
+    events = collect_events(UnifiedSupportRunner(factory), request())
+    serialized = json.dumps(events).casefold()
+
+    assert sentinel not in serialized
+    for forbidden_key in (
+        '"chain_of_thought"',
+        '"hidden_reasoning"',
+        '"raw_provider_response"',
+        '"authorization"',
+        '"api_key"',
+        '"request_headers"',
+        '"reasoning_tokens"',
+    ):
+        assert forbidden_key not in serialized

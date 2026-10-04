@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from backonthelangchain.rag.chunking import split_markdown_faqs
+from backonthelangchain.rag.chunking import TextChunk, split_markdown_faqs
 from backonthelangchain.rag.embeddings import OpenAIEmbeddingModel
 from backonthelangchain.rag.loaders import load_text_file
 from backonthelangchain.rag.metadata import enrich_chunk_metadata
@@ -14,7 +14,24 @@ from backonthelangchain.rag.rerankers import NoOpReranker, RerankedChunk, Rerank
 from backonthelangchain.rag.retrieval import FAISSRetriever, RetrievedChunk
 
 
-DEFAULT_FAQ_PATH = Path(__file__).parent / "data" / "tier1_tech_support_faq.md"
+DEFAULT_FAQ_PATH = Path(__file__).parent / "data" / "demo_support_knowledge"
+
+
+def load_support_knowledge_chunks(path: str | Path) -> list[TextChunk]:
+    """Load one Markdown file or a directory of demo support documents."""
+    knowledge_path = Path(path)
+    document_paths = (
+        sorted(knowledge_path.glob("*.md"))
+        if knowledge_path.is_dir()
+        else [knowledge_path]
+    )
+    chunks = []
+    for document_path in document_paths:
+        raw_document = load_text_file(document_path)
+        chunks.extend(enrich_chunk_metadata(split_markdown_faqs(raw_document)))
+    if not chunks:
+        raise ValueError("Support knowledge base must contain at least one FAQ section.")
+    return chunks
 
 
 @dataclass(frozen=True)
@@ -32,7 +49,7 @@ class TechSupportRAGPipeline:
 
     Pipeline:
 
-        FAQ markdown
+        fictional demo support Markdown documents
         -> FAQ boundary chunking
         -> deterministic metadata enrichment
         -> OpenAI embeddings
@@ -60,12 +77,8 @@ class TechSupportRAGPipeline:
         if retriever is not None:
             self.retriever = retriever
         else:
-            raw_document = load_text_file(self.faq_path)
-            chunks = split_markdown_faqs(raw_document)
-            enriched_chunks = enrich_chunk_metadata(chunks)
-
             self.retriever = FAISSRetriever.from_chunks(
-                enriched_chunks,
+                load_support_knowledge_chunks(self.faq_path),
                 embedding_model=self.embedding_model,
             )
 

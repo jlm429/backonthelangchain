@@ -1,8 +1,8 @@
 # Architecture
 
-The repository contains focused Python examples and one unified support graph.
-The web application and primary support API both use the unified graph. They do
-not duplicate its routing logic.
+The repository contains focused Python examples and one observable prototype of
+a combined support flow. The web application and primary support API both use
+the unified graph. They do not duplicate its routing logic.
 
 ## Unified support graph
 
@@ -59,12 +59,36 @@ application-level lifecycle events:
 - `run_failed`
 
 Event node identifiers match the graph-description identifiers. The browser
-uses them to render waiting, running, completed, failed, and disabled states and
-to preserve the executed path after completion.
+uses them to render waiting, running, completed, failed, and disabled states,
+preserve the executed path, and attach backend-authored evidence to each
+completed node. Completed nodes are selectable.
 
-The event adapter allowlists useful application fields. It does not stream
-prompts, raw SDK responses, provider internals, stack traces, or model hidden
-reasoning.
+Each completed stage uses one typed evidence envelope with `stage_id`, `label`,
+`summary`, `inputs`, and `outputs`. Nodes construct the allowlisted
+application-level contribution, and the event adapter validates it before
+serialization. The adapter does not stream prompts, raw SDK responses,
+provider internals, configuration, request headers, stack traces, private
+reasoning tokens, or model hidden reasoning.
+
+The inspectable nodes expose:
+
+| Node | Application evidence |
+| --- | --- |
+| User Query | validated query, selected simulated states, and RAG option |
+| OpenAI Moderation | allowed or blocked, flagged state, model, and normalized result |
+| Simulated Status | configured state, relevant services, evidence reports, and overall corroboration assessment |
+| Jev Support Routing | classified and selected routes, route confidence and probabilities, route and escalation thresholds, threshold results, fallback use, and explicit-human-request detection |
+| Tier 1 FAQ Retrieval | retrieval query, result count, ranked demo documents, document ids, scores when available, snippets, and exact response context |
+| Technical Response | query, route, structured system evidence, retrieved knowledge supplied, escalation state, production type, and generated response |
+| Billing Response | query, route, system evidence visible to the application, escalation state, production type, and structured response |
+| Human Escalation | the Jev-derived escalation state and deterministic handoff response |
+| Blocked Response | the moderation decision and deterministic safe response |
+| Final Result | outcome, answer, deterministic execution summary, and provenance |
+
+The explicit-human-request detector is observable context only. It does not
+force escalation or replace Jev's score. When a provider decision is
+unavailable, the evidence says `unknown` and records fallback use rather than
+inventing a reason.
 
 Each web request receives a newly compiled, checkpoint-free graph. This keeps
 request state isolated. The focused teaching graphs may use in-memory
@@ -82,7 +106,7 @@ compares the user's report with the selected state and distinguishes:
 - no component-specific signal in the report
 - a report corroborated by simulated outage state
 - a report partially corroborated by simulated degraded state
-- a report not corroborated by simulated operational state
+- a report contradicted by simulated operational state
 
 The resulting context informs Jev and the OpenAI fallback. It does not directly
 force a route or escalation. The normalized result returns both the selected
@@ -93,16 +117,35 @@ authenticated adapter while preserving the graph-state contract. It should add
 source identity, timestamps, freshness checks, authorization, failure handling,
 and audit logs.
 
-## Optional FAQ retrieval
+## Optional demo knowledge retrieval
 
-FAQ retrieval is the only caller-configurable graph stage. When enabled, a
-technical route runs the bundled FAQ through OpenAI embeddings and a FAISS
-index before technical response generation. The unified graph uses the no-op
-reranker, so it does not require Voyage.
+Retrieval is the only caller-configurable graph stage. When enabled, a technical
+route runs the bundled fictional demo knowledge through OpenAI embeddings and a
+FAISS index before technical response generation. The unified graph uses the
+no-op reranker, so it does not require Voyage.
+
+The demo knowledge base contains separate procedures for Accounting Workstation
+Recovery, Field VPN Certificate Recovery, Warehouse Scanner Synchronization,
+and Meeting Room Display Recovery. The accounting procedure is the only source
+of its Acme Report Writer instructions. Those instructions are not present in
+the response prompt or routing logic.
 
 When disabled, the compiled technical branch connects routing directly to the
 technical response. Moderation, status evaluation, routing, and response stages
 cannot be disabled through the API. Unknown option fields are rejected.
+
+## Execution summary and provenance
+
+After a completed run, the backend derives a concise execution summary from the
+same validated stage evidence returned by the graph. It reports moderation,
+system evidence, Jev scores and threshold results, retrieval, response context,
+and outcome. This is deterministic application narration, not generated
+chain-of-thought.
+
+The final result also records the user query, selected simulated state, status
+assessment, Jev destination, retrieved document names, escalation outcome, and
+response production type. Changing a query, status selection, or RAG setting
+therefore changes both the executed path and its visible provenance.
 
 ## Application boundary
 

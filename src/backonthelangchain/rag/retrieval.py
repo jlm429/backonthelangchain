@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import pickle
-
-import faiss
-import numpy as np
+from typing import Any
 
 from backonthelangchain.rag.chunking import TextChunk
 from backonthelangchain.rag.embeddings import OpenAIEmbeddingModel
@@ -39,7 +37,7 @@ class FAISSRetriever:
 
         self.chunks = chunks
         self.embedding_model = embedding_model or OpenAIEmbeddingModel()
-        self.index: faiss.IndexFlatIP | None = None
+        self.index: Any | None = None
 
     @classmethod
     def from_chunks(
@@ -63,6 +61,9 @@ class FAISSRetriever:
         Vectors are L2-normalized, so inner product is cosine similarity.
         """
 
+        import faiss
+        import numpy as np
+
         texts = [chunk.text for chunk in self.chunks]
         vectors = np.array(
             self.embedding_model.embed_documents(texts),
@@ -78,6 +79,8 @@ class FAISSRetriever:
 
     def retrieve(self, query: str, *, top_k: int = 10) -> list[RetrievedChunk]:
         """Return top-k chunks by vector similarity."""
+        import faiss
+        import numpy as np
 
         if self.index is None:
             self.build_index()
@@ -110,6 +113,7 @@ class FAISSRetriever:
 
     def save(self, directory: str | Path) -> None:
         """Persist the FAISS index and chunk metadata."""
+        import faiss
 
         if self.index is None:
             self.build_index()
@@ -130,6 +134,7 @@ class FAISSRetriever:
         embedding_model: OpenAIEmbeddingModel | None = None,
     ) -> "FAISSRetriever":
         """Load a persisted FAISS retriever."""
+        import faiss
 
         path = Path(directory)
 

@@ -4,9 +4,10 @@ Keep schemas separate from graph logic so they can be reused by notebooks,
 API endpoints, tests, and evaluation scripts.
 """
 
-from typing import Any, Literal, TypedDict, Union
+from operator import add
+from typing import Annotated, Any, Literal, TypedDict, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 RouteDomain = Literal["tech_support", "billing"]
@@ -19,6 +20,51 @@ JevRouteNodeName = Literal[
     "billing_answer",
 ]
 SafetyGateNodeName = Literal["router", "blocked_response"]
+StageId = Literal[
+    "__start__",
+    "safety_check",
+    "blocked_response",
+    "simulated_status_context",
+    "jev_router",
+    "faq_retrieval",
+    "human_escalation",
+    "tech_support_answer",
+    "billing_answer",
+    "__end__",
+]
+
+
+class StageEvidence(BaseModel):
+    """Allowlisted application evidence produced by one executed graph stage."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    stage_id: StageId
+    label: str
+    summary: str
+    inputs: dict[str, Any] = Field(default_factory=dict)
+    outputs: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExecutionSummaryFact(BaseModel):
+    """One deterministic fact derived from completed stage evidence."""
+
+    category: Literal[
+        "safety",
+        "system_evidence",
+        "routing",
+        "retrieval",
+        "response_context",
+        "outcome",
+    ]
+    text: str
+
+
+class ExecutionSummary(BaseModel):
+    """Deterministic run summary containing no generated reasoning."""
+
+    headline: str
+    facts: list[ExecutionSummaryFact]
 
 
 class RouteDecision(BaseModel):
@@ -101,14 +147,20 @@ class SupportRouterState(TypedDict, total=False):
     jev_route_probabilities: dict[RouteDomain, float]
     jev_human_escalation_probability: float
     jev_decision_available: bool
+    jev_classified_route: RouteDomain
     needs_human_escalation: float
     jev_used_fallback: bool
+    explicit_human_request_detected: bool
 
     # Execution
     tool_result: str
     rag_context: str
     rag_sources: list[dict[str, Any]]
+    rag_query: str
+    rag_result_count: int
+    response_context: dict[str, Any]
     answer: Union[str, dict]
+    stage_evidence: Annotated[list[dict[str, Any]], add]
 
 
 class SupportRouterInput(TypedDict):
@@ -139,8 +191,12 @@ class SupportRouterOutput(TypedDict, total=False):
     jev_route_probabilities: dict[RouteDomain, float]
     jev_human_escalation_probability: float
     jev_decision_available: bool
+    jev_classified_route: RouteDomain
     needs_human_escalation: float
     jev_used_fallback: bool
+    explicit_human_request_detected: bool
+    response_context: dict[str, Any]
+    stage_evidence: list[dict[str, Any]]
 
 
 class UnifiedSupportOutput(SupportRouterOutput, total=False):
@@ -148,3 +204,6 @@ class UnifiedSupportOutput(SupportRouterOutput, total=False):
 
     status_evidence: dict[str, Any]
     rag_sources: list[dict[str, Any]]
+    rag_context: str
+    rag_query: str
+    rag_result_count: int

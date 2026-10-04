@@ -296,6 +296,9 @@ def test_cors_allows_only_the_configured_origin():
 class FakeSupportRunner:
     def __init__(self):
         self.requests = []
+        self.raw_provider_response = {
+            "authorization": "private-provider-token-never-return"
+        }
 
     async def events(self, request):
         self.requests.append(request)
@@ -305,9 +308,33 @@ class FakeSupportRunner:
             "node_id": "safety_check",
         }
         yield {
+            "type": "node_completed",
+            "node_id": "safety_check",
+            "evidence": {
+                "stage_id": "safety_check",
+                "label": "OpenAI Moderation",
+                "summary": "Moderation allowed the request.",
+                "inputs": {"user_query": request.query},
+                "outputs": {
+                    "decision": "allowed",
+                    "model": "fake-moderation",
+                },
+            },
+        }
+        yield {
             "type": "run_completed",
             "run_id": "fake-run",
-            "result": {"outcome": "completed"},
+            "evidence": {
+                "stage_id": "__end__",
+                "label": "Final result",
+                "summary": "Completed.",
+                "inputs": {"executed_path": ["safety_check"]},
+                "outputs": {"outcome": "completed"},
+            },
+            "result": {
+                "outcome": "completed",
+                "stage_evidence": [],
+            },
         }
 
 
@@ -367,9 +394,13 @@ def test_support_endpoint_streams_sse_and_validated_context():
     assert response.headers["content-type"].startswith("text/event-stream")
     assert "event: execution" in response.text
     assert '"type": "node_started"' in response.text
+    assert '"stage_id": "safety_check"' in response.text
     assert runner.requests[0].simulated_status.checkout == "outage"
     assert OPENAI_SENTINEL not in response.text
     assert TYPESAFE_SENTINEL not in response.text
+    assert "private-provider-token-never-return" not in response.text
+    assert "raw_provider_response" not in response.text
+    assert "authorization" not in response.text
 
 
 def test_support_endpoint_requires_all_simulated_status_selections():
