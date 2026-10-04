@@ -10,15 +10,13 @@ fast classification, retrieval, and response generation in one inspectable
 LangGraph application, and automatically identifies requests that may need
 human intervention.
 
-The repository remains useful for learning System 1-style classifiers and
-routers, System 2-style response generation, and RAG. System 1-style calls are
-fast and inexpensive for frequent classification and routing decisions, while
-System 2-style models trade more time and cost for deeper reasoning and
-stronger generated responses. RAG injects domain-specific knowledge at request
-time, as the experiments below demonstrate. The unified application is
-organized like a real support workflow so a run can be tested and debugged from
-its structured inputs, decisions, evidence, route, and output. It is a
-prototype, not a production-ready support service.
+System 1-style calls are fast and inexpensive for frequent classification and
+routing decisions, while System 2-style models trade more time and cost for
+deeper reasoning and stronger generated responses. RAG injects domain-specific
+knowledge at request time, as the experiments below demonstrate. The unified
+application is organized like a real support workflow so a run can be tested
+and debugged from its structured inputs, decisions, evidence, route, and
+output.
 
 ## Python-only quick start
 
