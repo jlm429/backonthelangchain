@@ -15,6 +15,48 @@ is organized like a real support workflow so a run can be tested and debugged
 from its structured inputs, decisions, evidence, route, and output. It is a
 prototype, not a production-ready support service.
 
+## How it works
+
+`backonthelangchain` explores how different AI techniques can work together
+instead of asking one LLM to do everything.
+
+The unified support workflow combines a dedicated safety check, external
+evidence, fast classification, retrieval, and LLM generation:
+
+```text
+User -> Moderation -> System Status -> Jev
+                                          +-> Optional RAG -> Response LLM -+
+                                          +-> Response LLM -----------------+-> Final Result
+                                          +-> Human Escalation -------------+
+```
+
+Each component has a different job:
+
+- **OpenAI Moderation** provides a mandatory safety check before the request
+  moves through the workflow.
+- **System Status** adds simulated external evidence about the environment,
+  such as whether a service is operational, degraded, or down.
+- **Jev** makes fast routing and escalation decisions without requiring a
+  larger generative model to make every decision. The application exposes its
+  route confidence, route probabilities, escalation probability, thresholds,
+  fallback use, and threshold results.
+- **RAG** optionally injects domain-specific knowledge that the model would not
+  otherwise know. Ranked documents, scores, snippets, and the exact supplied
+  context remain visible.
+- **The response LLM** handles the part LLMs are good at: understanding the
+  available context and producing a useful natural-language response.
+- **LangGraph** connects these pieces into an explicit workflow. It controls
+  what runs, what information moves between stages, and which path is taken.
+- **Human escalation** occurs only when Jev's escalation score meets the
+  configured threshold. Repeated failure or critical impact may still score
+  below it, and that limitation remains visible.
+
+The idea is to use the right tool for each part of the problem instead of
+treating the LLM as the entire application:
+
+> **Fast models decide. Tools provide facts. RAG provides domain knowledge.
+> LLMs understand and generate. LangGraph orchestrates the system.**
+
 ## Python-only quick start
 
 Yes, the project works without the GUI or a running FastAPI server, and the
@@ -92,50 +134,78 @@ The retrieval stage uses OpenAI embeddings and runs only for technical requests
 when the option is enabled in the interface. Its bundled documents are clearly
 labeled fictional demo knowledge.
 
-## Compare observable scenarios
+## Try it
 
-The interface includes scenarios for ordinary MFA support, repeated failed
-attempts, business-critical checkout impact, an explicit human request, a
-duplicate billing charge, and a reported checkout outage. The two checkout
-samples configure the same report against Operational and Outage demo state so
-the system evidence and Jev score can be compared without forcing a result.
-Set a relevant service to Operational, Degraded, and Outage in turn to compare
-contradicted, partially corroborated, and corroborated evidence.
+The web app lets you change parts of the workflow and watch what happens.
 
-The accounting workstation sample is a direct RAG A/B comparison. Run it with
-RAG off to give response generation only generic support context. Run it with
-RAG on to retrieve the fictional **Accounting Workstation Recovery** document,
-which supplies the organization-specific Acme Report Writer procedure. The
-procedure is not embedded in the response prompt or application routing logic.
+### Turn RAG on and off
 
-For escalation, compare ordinary failure, repeated failure, critical business
-impact, and the explicit human request. The UI shows Jev's escalation
-probability, the configured `0.80` threshold, and whether it was met. Jev
-remains authoritative for escalation.
+Run the accounting workstation support query with RAG off. The response model
+has its general knowledge and the other workflow context, but not the
+organization-specific recovery procedure.
 
-## What the unified example demonstrates
+Now turn RAG on and run the same query. The retrieval step finds the fictional
+**Accounting Workstation Recovery** document and injects its Acme Report Writer
+procedure into the context used to generate the response. Open the RAG node to
+see exactly what was retrieved.
 
-- **OpenAI Moderation** is mandatory and authoritative before routing or
-  response generation.
-- **Simulated system and tool evidence** records configured service state and
-  whether the user's report is corroborated, contradicted, partially
-  corroborated, mixed across services, or not applicable. It is demo evidence,
-  not monitoring data.
-- **Jev** is the routing and escalation classifier. The application exposes its
-  route confidence, route probabilities, escalation probability, thresholds,
-  fallback use, and threshold results without substituting a desired outcome.
-- **RAG** optionally retrieves from distinct fictional organization procedures
-  for accounting workstations, VPN certificates, warehouse scanners, and
-  meeting room displays. Ranked documents, scores, snippets, and the exact
-  supplied context are visible.
-- **The response-generation LLM** receives allowlisted application context:
-  the query, selected route, system evidence, retrieved knowledge, and
-  escalation state. Its generated response is recorded as the stage output.
-- **LangGraph** remains the orchestrator and the executable source of truth for
-  the graph description, execution path, and streamed node ids.
-- **Human escalation** occurs only when Jev's escalation score meets the
-  configured threshold. Repeated failure or critical impact may still score
-  below it, and that limitation remains visible.
+This demonstrates a common reason for RAG: giving an LLM knowledge specific to
+an organization or application without retraining the model.
+
+### Change the system state
+
+Set Checkout to Operational, Degraded, and Outage in turn, then submit the same
+report that checkout is down. The user's message alone is a claim. The System
+Status stage gives the workflow another source of evidence, allowing the run to
+record whether the claim is contradicted, partially corroborated, or
+corroborated.
+
+The current status is simulated, but the same node could later query a
+monitoring system, status API, or MCP tool. It is demo evidence, not real
+monitoring data.
+
+### Watch Jev make the decision
+
+Try an ordinary support request, repeated failed troubleshooting, a critical
+outage, and an explicit request for a human. Jev produces routing and
+escalation scores that determine where the workflow goes next.
+
+This demonstrates using a small, specialized model for fast and inexpensive
+decisions while reserving the larger generative model for tasks that benefit
+from generation and deeper language understanding. The UI exposes Jev's
+scores, the configured `0.80` escalation threshold, and whether that threshold
+was met, so you can see when the classifier gets the decision right and when it
+does not.
+
+### Follow the graph
+
+The graph is the application. As a request runs, watch execution move through:
+
+```text
+Moderation -> System Status -> Jev -> RAG -> Response -> Final Result
+```
+
+Select a completed node to see what information that stage received or
+produced. At the end, **What happened?** summarizes:
+
+- which path executed
+- what system evidence was available
+- how Jev routed the request
+- what RAG retrieved
+- what context reached the response model
+- whether human escalation was triggered
+- how the final response was produced
+
+This makes it possible to inspect the behavior of the complete AI system
+instead of seeing only the final LLM response.
+
+## Why combine these approaches?
+
+A production AI application does not have to choose between traditional
+software, specialized models, retrieval, tools, and large language models.
+They can complement one another. This project is a sandbox for experimenting
+with where each approach works well, where it fails, and how changing one part
+affects the rest of the workflow.
 
 Every completed run includes a deterministic "What happened?" summary and
 final-result provenance. Both are derived from structured stage evidence. No
