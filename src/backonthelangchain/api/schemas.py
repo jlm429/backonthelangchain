@@ -57,10 +57,10 @@ class SimulatedSystemState(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    authentication: Literal["operational", "degraded", "outage"] = "operational"
-    billing: Literal["operational", "degraded", "outage"] = "operational"
-    checkout: Literal["operational", "degraded", "outage"] = "operational"
-    api: Literal["operational", "degraded", "outage"] = "operational"
+    authentication: Literal["operational", "degraded", "outage"]
+    billing: Literal["operational", "degraded", "outage"]
+    checkout: Literal["operational", "degraded", "outage"]
+    api: Literal["operational", "degraded", "outage"]
 
 
 class SupportRunRequest(BaseModel):
@@ -70,9 +70,7 @@ class SupportRunRequest(BaseModel):
 
     query: str = Field(min_length=1, max_length=MAX_QUERY_LENGTH)
     options: SupportGraphOptions = Field(default_factory=SupportGraphOptions)
-    simulated_status: SimulatedSystemState = Field(
-        default_factory=SimulatedSystemState
-    )
+    simulated_status: SimulatedSystemState
 
     @field_validator("query")
     @classmethod

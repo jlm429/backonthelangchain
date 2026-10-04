@@ -130,7 +130,12 @@ def request(*, retrieval=False, status="operational", query="Login is down"):
     return SupportRunRequest(
         query=query,
         options=SupportGraphOptions(faq_retrieval=retrieval),
-        simulated_status=SimulatedSystemState(authentication=status),
+        simulated_status=SimulatedSystemState(
+            authentication=status,
+            billing="operational",
+            checkout="operational",
+            api="operational",
+        ),
     )
 
 
@@ -162,11 +167,23 @@ def test_graph_description_comes_from_enabled_executable_shape():
     assert ("jev_router", "tech_support_answer") in disabled_edges
     assert ("jev_router", "faq_retrieval") in enabled_edges
     assert ("faq_retrieval", "tech_support_answer") in enabled_edges
-    assert all(
-        edge["branch"]
+    assert next(
+        edge
+        for edge in disabled["edges"]
+        if edge["source"] == "jev_router"
+        and edge["target"] == "tech_support_answer"
+    )["branch"] == "technical"
+    assert {
+        (edge["source"], edge["target"], edge["branch"])
         for edge in enabled["edges"]
         if edge["conditional"]
-    )
+    } == {
+        ("safety_check", "blocked_response", "flagged"),
+        ("safety_check", "simulated_status_context", "allowed"),
+        ("jev_router", "human_escalation", "escalate"),
+        ("jev_router", "billing_answer", "billing"),
+        ("jev_router", "faq_retrieval", "technical"),
+    }
 
 
 def test_optional_retrieval_is_executed_only_when_enabled():
@@ -221,7 +238,12 @@ def test_each_simulated_status_level_reaches_jev_context(status, expected):
 
 
 def test_reported_only_outage_is_distinct_from_corroborating_state():
-    statuses = SimulatedSystemState().model_dump()
+    statuses = SimulatedSystemState(
+        authentication="operational",
+        billing="operational",
+        checkout="operational",
+        api="operational",
+    ).model_dump()
 
     reported_only = build_simulated_status_evidence(
         "Production is down",
@@ -251,6 +273,14 @@ def test_live_events_use_graph_node_ids_and_preserve_actual_path():
         "tech_support_answer",
     ]
     assert all("reasoning" not in event for event in events)
+    status_event = next(
+        event
+        for event in events
+        if event.get("type") == "node_completed"
+        and event.get("node_id") == "simulated_status_context"
+    )
+    assert status_event["output"]["status_evidence"]["user_reported_problem"] is True
+    assert set(status_event["output"]) == {"status_evidence"}
 
 
 @pytest.mark.parametrize(

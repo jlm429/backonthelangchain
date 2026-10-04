@@ -14,7 +14,8 @@
   waiting, running, completed, failed, and disabled node states.
 - Added independently selectable simulated Authentication, Billing, Checkout,
   and API state, plus structured comparison of reported and corroborating
-  outage evidence supplied to Jev and routing context.
+  outage evidence supplied to Jev and routing context. All four selections are
+  required at the API boundary.
 - Added a Next.js and TypeScript interface backed by a FastAPI example registry.
 - Added structured browser results that preserve Jev provider observations
   separately from fallback routing controls, and shared the reusable Python

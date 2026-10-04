@@ -16,6 +16,15 @@ from backonthelangchain.api.schemas import SupportGraphOptions, SupportRunReques
 
 GraphFactory = Callable[[UnifiedSupportOptions], Any]
 
+BRANCH_LABELS = {
+    ("safety_check", "blocked_response"): "flagged",
+    ("safety_check", "simulated_status_context"): "allowed",
+    ("jev_router", "human_escalation"): "escalate",
+    ("jev_router", "billing_answer"): "billing",
+    ("jev_router", "faq_retrieval"): "technical",
+    ("jev_router", "tech_support_answer"): "technical",
+}
+
 
 class _DescriptionOnlyService:
     """Satisfy graph construction without creating or calling providers."""
@@ -64,12 +73,9 @@ def describe_unified_support_graph(
             "target": edge["target"],
             "conditional": bool(edge.get("conditional", False)),
             "branch": (
-                edge.get("data")
-                or (
-                    UNIFIED_SUPPORT_NODE_METADATA[edge["target"]]["label"]
-                    if edge.get("conditional", False)
-                    else None
-                )
+                BRANCH_LABELS[(edge["source"], edge["target"])]
+                if edge.get("conditional", False)
+                else None
             ),
         }
         for edge in raw_graph["edges"]
@@ -95,7 +101,6 @@ def _node_output(node_id: str, output: Any) -> dict[str, Any]:
         },
         "simulated_status_context": {
             "status_evidence",
-            "reported_outage",
         },
         "jev_router": {
             "domain",

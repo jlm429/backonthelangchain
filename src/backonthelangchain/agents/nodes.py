@@ -207,7 +207,6 @@ def simulated_status_context_node(
     return {
         "status_evidence": evidence,
         "status_context": json.dumps(evidence, sort_keys=True),
-        "reported_outage": bool(evidence["user_reported_problem"]),
     }
 
 

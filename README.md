@@ -75,7 +75,8 @@ reasoning are not streamed.
 ## Simulated system status
 
 The UI includes independently selectable demo state for Authentication,
-Billing, Checkout, and API. Each can be Operational, Degraded, or Outage.
+Billing, Checkout, and API. Each can be Operational, Degraded, or Outage, and
+API clients must explicitly provide all four selections for every run.
 
 These values are simulated evidence. They do not come from monitoring systems
 and must not be interpreted as real service health. The browser sends them as a

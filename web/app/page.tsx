@@ -165,6 +165,10 @@ function GraphView({ graph, executions, loading }: {
       nodes: graph.nodes.filter((node) => node.stage === stage),
     }));
   }, [graph]);
+  const nodeLabels = useMemo(
+    () => new Map(graph?.nodes.map((node) => [node.id, node.label]) ?? []),
+    [graph],
+  );
 
   return (
     <section className="graph-card" aria-labelledby="graph-title" aria-busy={loading}>
@@ -184,9 +188,8 @@ function GraphView({ graph, executions, loading }: {
       {graph && (
         <>
           <div className="graph-flow" role="list" aria-label="Support graph nodes">
-            {stages.map(({ stage, nodes }, index) => (
+            {stages.map(({ stage, nodes }) => (
               <div className="graph-stage" key={stage}>
-                {index > 0 && <span className="stage-arrow" aria-hidden="true">→</span>}
                 <div className="stage-nodes">
                   {nodes.map((node) => {
                     const execution = executions[node.id] ?? {
@@ -217,17 +220,23 @@ function GraphView({ graph, executions, loading }: {
               </div>
             ))}
           </div>
-          <details className="edge-map">
-            <summary>Inspect {graph.edges.length} executable edges</summary>
-            <div>
+          <section className="edge-map" aria-labelledby="edge-map-title">
+            <div className="edge-map-heading">
+              <span className="kicker">Backend-serialized connections</span>
+              <strong id="edge-map-title">Executable flow</strong>
+              <small>{graph.edges.length} edges from the compiled graph</small>
+            </div>
+            <div className="edge-list">
               {graph.edges.map((edge, index) => (
-                <span key={`${edge.source}-${edge.target}-${index}`}>
-                  {edge.source} <b>→</b> {edge.target}
-                  {edge.conditional && <i>{edge.branch ?? "conditional"}</i>}
-                </span>
+                <div className="graph-edge" key={`${edge.source}-${edge.target}-${index}`}>
+                  <span>{nodeLabels.get(edge.source) ?? edge.source}</span>
+                  <b aria-label="flows to">→</b>
+                  <span>{nodeLabels.get(edge.target) ?? edge.target}</span>
+                  {edge.conditional && <i>{edge.branch}</i>}
+                </div>
               ))}
             </div>
-          </details>
+          </section>
         </>
       )}
     </section>

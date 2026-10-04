@@ -355,6 +355,28 @@ def test_support_endpoint_streams_sse_and_validated_context():
     assert TYPESAFE_SENTINEL not in response.text
 
 
+def test_support_endpoint_requires_all_simulated_status_selections():
+    runner = FakeSupportRunner()
+    client = make_client(successful_handler, support_runner=runner)
+
+    missing_status = client.post(
+        "/api/support/run",
+        json={"query": "Checkout is down", "options": {"faq_retrieval": False}},
+    )
+    partial_status = client.post(
+        "/api/support/run",
+        json={
+            "query": "Checkout is down",
+            "options": {"faq_retrieval": False},
+            "simulated_status": {"checkout": "outage"},
+        },
+    )
+
+    assert missing_status.status_code == 422
+    assert partial_status.status_code == 422
+    assert runner.requests == []
+
+
 def test_required_nodes_cannot_be_disabled_by_run_payload():
     runner = FakeSupportRunner()
     client = make_client(successful_handler, support_runner=runner)
@@ -366,6 +388,12 @@ def test_required_nodes_cannot_be_disabled_by_run_payload():
             "options": {
                 "faq_retrieval": False,
                 "safety_check": False,
+            },
+            "simulated_status": {
+                "authentication": "operational",
+                "billing": "operational",
+                "checkout": "operational",
+                "api": "operational",
             },
         },
     )

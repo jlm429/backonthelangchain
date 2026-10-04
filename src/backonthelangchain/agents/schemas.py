@@ -92,7 +92,6 @@ class SupportRouterState(TypedDict, total=False):
     # Explicit demo evidence, never real monitoring data
     status_evidence: dict[str, Any]
     status_context: str
-    reported_outage: bool
 
     # Routing
     domain: RouteDomain
@@ -148,5 +147,4 @@ class UnifiedSupportOutput(SupportRouterOutput, total=False):
     """Public output including explicit demo context and optional retrieval."""
 
     status_evidence: dict[str, Any]
-    reported_outage: bool
     rag_sources: list[dict[str, Any]]
