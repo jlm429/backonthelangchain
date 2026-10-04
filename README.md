@@ -4,58 +4,17 @@
 
 # backonthelangchain
 
-`backonthelangchain` is an observable prototype of a combined AI support flow.
-It connects mandatory safety, simulated system evidence, fast classification,
-retrieval, response generation, escalation, and LangGraph orchestration in one
-inspectable application.
+`backonthelangchain` is an observable prototype of a combined AI billing and IT
+support workflow. It connects mandatory safety, simulated system evidence,
+fast classification, retrieval, and response generation in one inspectable
+LangGraph application, and automatically identifies requests that may need
+human intervention.
 
 The repository remains useful for learning System 1-style classifiers and
 routers, System 2-style response generation, and RAG. The unified application
 is organized like a real support workflow so a run can be tested and debugged
 from its structured inputs, decisions, evidence, route, and output. It is a
 prototype, not a production-ready support service.
-
-## How it works
-
-`backonthelangchain` explores how different AI techniques can work together
-instead of asking one LLM to do everything.
-
-The unified support workflow combines a dedicated safety check, external
-evidence, fast classification, retrieval, and LLM generation:
-
-```text
-User -> Moderation -> System Status -> Jev
-                                          +-> Optional RAG -> Response LLM -+
-                                          +-> Response LLM -----------------+-> Final Result
-                                          +-> Human Escalation -------------+
-```
-
-Each component has a different job:
-
-- **OpenAI Moderation** provides a mandatory safety check before the request
-  moves through the workflow.
-- **System Status** adds simulated external evidence about the environment,
-  such as whether a service is operational, degraded, or down.
-- **Jev** makes fast routing and escalation decisions without requiring a
-  larger generative model to make every decision. The application exposes its
-  route confidence, route probabilities, escalation probability, thresholds,
-  fallback use, and threshold results.
-- **RAG** optionally injects domain-specific knowledge that the model would not
-  otherwise know. Ranked documents, scores, snippets, and the exact supplied
-  context remain visible.
-- **The response LLM** handles the part LLMs are good at: understanding the
-  available context and producing a useful natural-language response.
-- **LangGraph** connects these pieces into an explicit workflow. It controls
-  what runs, what information moves between stages, and which path is taken.
-- **Human escalation** occurs only when Jev's escalation score meets the
-  configured threshold. Repeated failure or critical impact may still score
-  below it, and that limitation remains visible.
-
-The idea is to use the right tool for each part of the problem instead of
-treating the LLM as the entire application:
-
-> **Fast models decide. Tools provide facts. RAG provides domain knowledge.
-> LLMs understand and generate. LangGraph orchestrates the system.**
 
 ## Python-only quick start
 
