@@ -28,17 +28,21 @@ OUTAGE_MARKERS = (
     "unable",
 )
 CLAUSE_BOUNDARY = re.compile(r"[.!?;]+|\b(?:but|while|whereas)\b")
-COMPONENT_CONNECTOR = re.compile(r"\s*(?:(?:,|\band\b|\bor\b)\s*)+")
+COMPONENT_CONNECTOR = re.compile(
+    r"\s*(?:(?:,|\band\b|\bor\b|\bnor\b|\bas well as\b)\s*)+"
+)
 
 
 def _is_negated(text: str, marker_start: int) -> bool:
+    prefix = text[:marker_start]
     return bool(
-        re.search(
+        re.search(r"\bneither\b[^.!?;]*\bnor\b[^.!?;]*$", prefix)
+        or re.search(
             (
                 r"(?:\bno|\bnot|\bnever|\bwithout|\bisn't|\bisnt)\s+"
-                r"(?:(?:an?|the)\s+)?(?:[\w'-]+\s+){0,2}$"
+                r"(?:(?:an?|the)\s+)?(?:[\w'-]+\s+){0,4}$"
             ),
-            text[:marker_start],
+            prefix,
         )
     )
 

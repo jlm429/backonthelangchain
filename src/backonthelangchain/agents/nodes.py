@@ -96,7 +96,10 @@ def make_jev_router_node(
         reason: str,
         context: dict | None,
     ) -> SupportRouterState:
-        decision = fallback_router_service.route(user_query, context=context)
+        if context is None:
+            decision = fallback_router_service.route(user_query)
+        else:
+            decision = fallback_router_service.route(user_query, context=context)
         return {
             "domain": decision.domain,
             "route_reason": f"{reason} Fallback router: {decision.reason}",
@@ -109,10 +112,13 @@ def make_jev_router_node(
         status_evidence = state.get("status_evidence")
 
         try:
-            result = jev_router_service.evaluate(
-                user_query,
-                context=status_evidence,
-            )
+            if status_evidence is None:
+                result = jev_router_service.evaluate(user_query)
+            else:
+                result = jev_router_service.evaluate(
+                    user_query,
+                    context=status_evidence,
+                )
         except JevSupportRouterError:
             return {
                 **fallback(user_query, "Jev routing failed.", status_evidence),

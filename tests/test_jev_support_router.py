@@ -66,6 +66,16 @@ class FakeRouterService:
         return RouteDecision(domain=self.domain, reason="fake fallback route")
 
 
+class LegacyJevService(FakeJevService):
+    def evaluate(self, query):
+        return super().evaluate(query)
+
+
+class LegacyRouterService(FakeRouterService):
+    def route(self, query):
+        return super().route(query)
+
+
 class FakeTechSupportService:
     def __init__(self):
         self.queries = []
@@ -239,6 +249,22 @@ def test_high_confidence_jev_choice_routes_without_fallback():
     assert tech.queries == ["login error"]
 
 
+def test_legacy_injected_jev_service_keeps_one_argument_contract():
+    jev = LegacyJevService(result=jev_result())
+    graph = build_graph(
+        safety=FakeSafetyService(),
+        jev=jev,
+        fallback=LegacyRouterService(),
+        tech=FakeTechSupportService(),
+        billing=FakeBillingService(),
+    )
+
+    response = invoke(graph, "login error", "legacy-jev-contract")
+
+    assert response["answer"] == "fake technical answer"
+    assert jev.queries == ["login error"]
+
+
 def test_low_confidence_jev_choice_uses_fallback_router():
     jev = FakeJevService(result=jev_result(confidence=0.69, escalation=0.40))
     fallback = FakeRouterService(domain="billing")
@@ -274,6 +300,24 @@ def test_jev_failure_uses_fallback_router():
     )
 
     response = invoke(graph, "cannot sign in", "jev-failure-fallback")
+
+    assert response["answer"] == "fake technical answer"
+    assert response["jev_decision_available"] is False
+    assert fallback.queries == ["cannot sign in"]
+
+
+def test_legacy_injected_fallback_keeps_one_argument_contract():
+    jev = LegacyJevService(error=JevSupportRouterError("provider unavailable"))
+    fallback = LegacyRouterService(domain="tech_support")
+    graph = build_graph(
+        safety=FakeSafetyService(),
+        jev=jev,
+        fallback=fallback,
+        tech=FakeTechSupportService(),
+        billing=FakeBillingService(),
+    )
+
+    response = invoke(graph, "cannot sign in", "legacy-fallback-contract")
 
     assert response["answer"] == "fake technical answer"
     assert response["jev_decision_available"] is False
