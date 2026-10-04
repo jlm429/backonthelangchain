@@ -16,10 +16,8 @@
   and API state, plus structured comparison of reported and corroborating
   outage evidence supplied to Jev and routing context. All four selections are
   required at the API boundary.
-- Added a Next.js and TypeScript interface backed by a FastAPI example registry.
-- Added structured browser results that preserve Jev provider observations
-  separately from fallback routing controls, and shared the reusable Python
-  runner between the API and CLI.
+- Preserved the FastAPI example registry and reusable Jev runner as legacy
+  teaching interfaces alongside the unified web application.
 - Added bounded request rate limiting, exact-origin CORS, server-side
   configuration validation, query and streaming request-body limits, and safe
   API error envelopes.
@@ -41,8 +39,5 @@
 - Documented the unified graph, live visualization, optional FAQ branch,
   simulated status evidence, routing context, and a path to real monitoring
   integrations.
-- Revised the README positioning and badges.
-- Documented the web architecture, local backend and frontend setup, security
-  model, deployment limitations, and example registration workflow.
 - Documented changelog guidance for documentation-only changes.
 - Created changelog to track project changes going forward.
