@@ -4,6 +4,9 @@ Nodes are intentionally thin LangGraph adapters. Reusable business or provider
 logic lives in services/ so it can be tested and reused outside these graphs.
 """
 
+import json
+from pathlib import Path
+
 from backonthelangchain.agents.schemas import (
     JevRouteNodeName,
     RouteNodeName,
@@ -18,6 +21,7 @@ from backonthelangchain.agents.services import (
     RouterService,
     TechSupportRAGService,
     TechSupportService,
+    build_simulated_status_evidence,
 )
 
 HUMAN_ESCALATION_ANSWER = (
@@ -87,8 +91,15 @@ def make_jev_router_node(
 ):
     """Create a Jev router that falls back when its route is uncertain."""
 
-    def fallback(user_query: str, reason: str) -> SupportRouterState:
-        decision = fallback_router_service.route(user_query)
+    def fallback(
+        user_query: str,
+        reason: str,
+        context: dict | None,
+    ) -> SupportRouterState:
+        if context is None:
+            decision = fallback_router_service.route(user_query)
+        else:
+            decision = fallback_router_service.route(user_query, context=context)
         return {
             "domain": decision.domain,
             "route_reason": f"{reason} Fallback router: {decision.reason}",
@@ -98,12 +109,19 @@ def make_jev_router_node(
 
     def jev_router_node(state: SupportRouterState) -> SupportRouterState:
         user_query = state["user_query"]
+        status_evidence = state.get("status_evidence")
 
         try:
-            result = jev_router_service.evaluate(user_query)
+            if status_evidence is None:
+                result = jev_router_service.evaluate(user_query)
+            else:
+                result = jev_router_service.evaluate(
+                    user_query,
+                    context=status_evidence,
+                )
         except JevSupportRouterError:
             return {
-                **fallback(user_query, "Jev routing failed."),
+                **fallback(user_query, "Jev routing failed.", status_evidence),
                 "jev_decision_available": False,
             }
 
@@ -135,7 +153,11 @@ def make_jev_router_node(
 
         return {
             **jev_state,
-            **fallback(user_query, "Jev route confidence was below the threshold."),
+            **fallback(
+                user_query,
+                "Jev route confidence was below the threshold.",
+                status_evidence,
+            ),
         }
 
     return jev_router_node
@@ -173,6 +195,61 @@ def make_tech_support_node(tech_support_service: TechSupportService):
 
     def tech_support_answer(state: SupportRouterState) -> SupportRouterState:
         answer, tool_result = tech_support_service.answer(state["user_query"])
+        return {
+            "tool_result": tool_result,
+            "answer": answer,
+        }
+
+    return tech_support_answer
+
+
+def simulated_status_context_node(
+    state: SupportRouterState,
+) -> SupportRouterState:
+    """Turn caller-selected demo state into explicit routing evidence."""
+    evidence = build_simulated_status_evidence(
+        state["user_query"],
+        state["simulated_status"],
+    )
+    return {
+        "status_evidence": evidence,
+        "status_context": json.dumps(evidence, sort_keys=True),
+    }
+
+
+def make_faq_retrieval_node(rag_pipeline):
+    """Create a visible FAQ retrieval stage from the existing RAG pipeline."""
+
+    def faq_retrieval_node(state: SupportRouterState) -> SupportRouterState:
+        result = rag_pipeline.run(state["user_query"])
+        return {
+            "rag_context": result.context,
+            "rag_sources": [
+                {
+                    "chunk_id": item.chunk_id,
+                    "title": item.metadata.get("title"),
+                    "source": Path(item.source).name,
+                    "retrieval_score": item.retrieval_score,
+                    "rerank_score": item.rerank_score,
+                }
+                for item in result.reranked_chunks
+            ],
+        }
+
+    return faq_retrieval_node
+
+
+def make_contextual_tech_support_node(
+    tech_support_service: TechSupportService,
+):
+    """Create a technical answer node that consumes graph-produced context."""
+
+    def tech_support_answer(state: SupportRouterState) -> SupportRouterState:
+        answer, tool_result = tech_support_service.answer(
+            state["user_query"],
+            system_context=state.get("status_context"),
+            rag_context=state.get("rag_context"),
+        )
         return {
             "tool_result": tool_result,
             "answer": answer,

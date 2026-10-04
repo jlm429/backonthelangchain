@@ -12,13 +12,22 @@ class TechSupportService:
     def __init__(self, chat_model) -> None:
         self.chat_model = chat_model
 
-    def answer(self, user_query: str) -> tuple[str, str]:
+    def answer(
+        self,
+        user_query: str,
+        *,
+        system_context: str | None = None,
+        rag_context: str | None = None,
+    ) -> tuple[str, str]:
         """Return the answer and the tool result used to produce it."""
-        tool_result = check_system_status.invoke({})
+        tool_result = system_context or check_system_status.invoke({})
+        context_parts = [f"System evidence:\n{tool_result}"]
+        if rag_context:
+            context_parts.append(f"Relevant Tier 1 FAQ context:\n{rag_context}")
         response = self.chat_model.invoke(
             [
                 TECH_SUPPORT_PROMPT,
-                SystemMessage(content=f"Tool result:\n{tool_result}"),
+                SystemMessage(content="\n\n".join(context_parts)),
                 HumanMessage(content=user_query),
             ]
         )

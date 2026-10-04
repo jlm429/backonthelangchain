@@ -4,12 +4,14 @@ Keep schemas separate from graph logic so they can be reused by notebooks,
 API endpoints, tests, and evaluation scripts.
 """
 
-from typing import Literal, TypedDict, Union
+from typing import Any, Literal, TypedDict, Union
 
 from pydantic import BaseModel, Field
 
 
 RouteDomain = Literal["tech_support", "billing"]
+SystemName = Literal["authentication", "billing", "checkout", "api"]
+SystemStatusLevel = Literal["operational", "degraded", "outage"]
 RouteNodeName = Literal["tech_support_answer", "billing_answer"]
 JevRouteNodeName = Literal[
     "human_escalation",
@@ -77,6 +79,7 @@ class SupportRouterState(TypedDict, total=False):
     """
 
     user_query: str
+    simulated_status: dict[SystemName, SystemStatusLevel]
 
     # Safety / pre-router gate
     is_safe: bool
@@ -85,6 +88,10 @@ class SupportRouterState(TypedDict, total=False):
     moderation_categories: dict[str, bool]
     moderation_category_scores: dict[str, float]
     safety_reason: str
+
+    # Explicit demo evidence, never real monitoring data
+    status_evidence: dict[str, Any]
+    status_context: str
 
     # Routing
     domain: RouteDomain
@@ -99,6 +106,8 @@ class SupportRouterState(TypedDict, total=False):
 
     # Execution
     tool_result: str
+    rag_context: str
+    rag_sources: list[dict[str, Any]]
     answer: Union[str, dict]
 
 
@@ -106,6 +115,13 @@ class SupportRouterInput(TypedDict):
     """Public graph input schema."""
 
     user_query: str
+
+
+class UnifiedSupportInput(TypedDict):
+    """Public input for the unified support graph."""
+
+    user_query: str
+    simulated_status: dict[SystemName, SystemStatusLevel]
 
 
 class SupportRouterOutput(TypedDict, total=False):
@@ -125,3 +141,10 @@ class SupportRouterOutput(TypedDict, total=False):
     jev_decision_available: bool
     needs_human_escalation: float
     jev_used_fallback: bool
+
+
+class UnifiedSupportOutput(SupportRouterOutput, total=False):
+    """Public output including explicit demo context and optional retrieval."""
+
+    status_evidence: dict[str, Any]
+    rag_sources: list[dict[str, Any]]
