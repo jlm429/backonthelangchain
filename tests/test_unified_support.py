@@ -332,6 +332,7 @@ def test_reported_only_outage_is_distinct_from_corroborating_state():
         "Checkout did not appear to be down",
         "There is no checkout outage",
         "Checkout isn't unavailable",
+        "Authentication and checkout aren't down",
         "Neither billing nor checkout is down",
     ],
 )
@@ -347,6 +348,27 @@ def test_negated_outage_language_does_not_create_evidence(query):
     assert evidence["user_reported_problem"] is False
     assert evidence["reports"] == []
     assert jev.calls[0][1]["user_reported_problem"] is False
+
+
+def test_coordinated_negation_does_not_hide_a_later_outage_report():
+    factory, _, jev, _, _ = make_graph_factory()
+
+    events = collect_events(
+        UnifiedSupportRunner(factory),
+        request(
+            status="outage",
+            query=(
+                "Neither billing nor checkout is down, and authentication is down"
+            ),
+        ),
+    )
+
+    evidence = completed_result(events)["system_status"]["evidence"]
+    assert [report["system"] for report in evidence["reports"]] == [
+        "authentication"
+    ]
+    assert evidence["reports"][0]["corroboration"] == "corroborated_outage"
+    assert jev.calls[0][1]["reports"] == evidence["reports"]
 
 
 def test_outage_evidence_is_associated_with_its_component_clause():

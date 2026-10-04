@@ -396,9 +396,15 @@ export default function Home() {
     setExecutions(graph ? initialNodeExecutions(graph) : {});
   }
 
-  function chooseSample(sample: string) {
-    setQuery(sample);
+  function updateQuery(nextQuery: string) {
+    setQuery(nextQuery);
+    setResult(null);
+    setExecutions(graph ? initialNodeExecutions(graph) : {});
     setError(null);
+  }
+
+  function chooseSample(sample: string) {
+    updateQuery(sample);
     queryRef.current?.focus();
   }
 
@@ -519,7 +525,7 @@ export default function Home() {
             maxLength={MAX_QUERY_LENGTH}
             rows={5}
             disabled={running}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => updateQuery(event.target.value)}
           />
           <div className="samples" aria-label="Sample support queries">
             {SAMPLE_QUERIES.map((sample) => (

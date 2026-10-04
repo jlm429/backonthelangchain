@@ -31,15 +31,22 @@ CLAUSE_BOUNDARY = re.compile(r"[.!?;]+|\b(?:but|while|whereas)\b")
 COMPONENT_CONNECTOR = re.compile(
     r"\s*(?:(?:,|\band\b|\bor\b|\bnor\b|\bas well as\b)\s*)+"
 )
+COORDINATED_NEGATION_BOUNDARY = re.compile(r",\s*(?:and|or)\b")
 
 
 def _is_negated(text: str, marker_start: int) -> bool:
     prefix = text[:marker_start]
+    coordinated_prefix = COORDINATED_NEGATION_BOUNDARY.split(prefix)[-1]
     return bool(
-        re.search(r"\bneither\b[^.!?;]*\bnor\b[^.!?;]*$", prefix)
+        re.search(
+            r"\bneither\b[^.!?;]*\bnor\b[^.!?;]*$",
+            coordinated_prefix,
+        )
         or re.search(
             (
-                r"(?:\bno|\bnot|\bnever|\bwithout|\bisn't|\bisnt)\s+"
+                r"(?:\bno|\bnot|\bnever|\bwithout|\bisn't|\bisnt|"
+                r"\baren't|\barent|\bwasn't|\bwasnt|\bweren't|\bwerent|"
+                r"\bdoesn't|\bdoesnt|\bdon't|\bdont|\bdidn't|\bdidnt)\s+"
                 r"(?:(?:an?|the)\s+)?(?:[\w'-]+\s+){0,4}$"
             ),
             prefix,
