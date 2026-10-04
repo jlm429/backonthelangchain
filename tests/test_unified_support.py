@@ -1,10 +1,15 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from time import sleep
 from types import SimpleNamespace
 
 import pytest
 
+from backonthelangchain.agents import graphs as graph_module
 from backonthelangchain.agents.graphs import (
     UnifiedSupportOptions,
+    _LazyDefaultRAGPipeline,
     build_unified_support_graph,
 )
 from backonthelangchain.agents.schemas import (
@@ -212,19 +217,53 @@ def test_optional_retrieval_is_executed_only_when_enabled():
     assert "/srv/backonthelangchain" not in str(enabled_events)
 
 
-def test_runner_reuses_compiled_graph_for_matching_options():
+def test_runner_builds_request_scoped_graphs_without_checkpoints():
     factory, _, _, _, _ = make_graph_factory()
     calls = []
+    checkpointers = []
 
     def counting_factory(options):
         calls.append(options)
-        return factory(options)
+        graph = factory(options)
+        checkpointers.append(graph.checkpointer)
+        return graph
 
     runner = UnifiedSupportRunner(counting_factory)
     collect_events(runner, request(retrieval=True))
     collect_events(runner, request(retrieval=True, query="Checkout is down"))
 
-    assert calls == [UnifiedSupportOptions(faq_retrieval=True)]
+    assert calls == [
+        UnifiedSupportOptions(faq_retrieval=True),
+        UnifiedSupportOptions(faq_retrieval=True),
+    ]
+    assert checkpointers == [None, None]
+
+
+def test_default_rag_pipeline_initializes_once_under_concurrency(monkeypatch):
+    builds = []
+
+    class FakePipeline:
+        def run(self, query):
+            return query
+
+    def build_pipeline():
+        builds.append(True)
+        sleep(0.05)
+        return FakePipeline()
+
+    monkeypatch.setattr(graph_module, "_build_default_rag_pipeline", build_pipeline)
+    pipeline = _LazyDefaultRAGPipeline()
+    start = Barrier(2)
+
+    def run(query):
+        start.wait()
+        return pipeline.run(query)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(run, ["login", "checkout"]))
+
+    assert sorted(results) == ["checkout", "login"]
+    assert builds == [True]
 
 
 def test_mandatory_moderation_blocks_all_later_stages():
@@ -323,6 +362,30 @@ def test_outage_evidence_is_associated_with_its_component_clause():
     assert [report["system"] for report in evidence["reports"]] == ["checkout"]
     assert evidence["reports"][0]["corroboration"] == "corroborated_outage"
     assert jev.calls[0][1]["reports"] == evidence["reports"]
+
+
+@pytest.mark.parametrize(
+    ("query", "expected_systems"),
+    [
+        ("Billing is operational and checkout is down", ["checkout"]),
+        ("Authentication and checkout are down", ["authentication", "checkout"]),
+        ("I can't request a payment refund", ["billing"]),
+    ],
+)
+def test_outage_evidence_is_associated_with_component_phrases(
+    query,
+    expected_systems,
+):
+    statuses = SimulatedSystemState(
+        authentication="outage",
+        billing="outage",
+        checkout="outage",
+        api="outage",
+    ).model_dump()
+
+    evidence = build_simulated_status_evidence(query, statuses)
+
+    assert [report["system"] for report in evidence["reports"]] == expected_systems
 
 
 def test_live_events_use_graph_node_ids_and_preserve_actual_path():

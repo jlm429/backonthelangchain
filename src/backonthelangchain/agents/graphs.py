@@ -4,6 +4,7 @@ Graphs compose reusable services into runnable LangGraph workflows.
 """
 
 from dataclasses import dataclass
+from threading import Lock
 from typing import Any
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -54,23 +55,33 @@ class UnifiedSupportOptions:
     faq_retrieval: bool = False
 
 
+def _build_default_rag_pipeline():
+    from backonthelangchain.rag.pipelines import TechSupportRAGPipeline
+    from backonthelangchain.rag.rerankers import NoOpReranker
+
+    return TechSupportRAGPipeline(
+        reranker=NoOpReranker(),
+        retrieve_top_k=5,
+        rerank_top_k=3,
+    )
+
+
 class _LazyDefaultRAGPipeline:
     """Create provider-backed retrieval only after its graph node is reached."""
 
     def __init__(self) -> None:
         self._pipeline = None
+        self._lock = Lock()
 
     def run(self, query: str):
         if self._pipeline is None:
-            from backonthelangchain.rag.pipelines import TechSupportRAGPipeline
-            from backonthelangchain.rag.rerankers import NoOpReranker
-
-            self._pipeline = TechSupportRAGPipeline(
-                reranker=NoOpReranker(),
-                retrieve_top_k=5,
-                rerank_top_k=3,
-            )
+            with self._lock:
+                if self._pipeline is None:
+                    self._pipeline = _build_default_rag_pipeline()
         return self._pipeline.run(query)
+
+
+_DEFAULT_RAG_PIPELINE = _LazyDefaultRAGPipeline()
 
 
 UNIFIED_SUPPORT_NODE_METADATA: dict[str, dict[str, Any]] = {
@@ -430,7 +441,7 @@ def build_unified_support_graph(
     billing_service = billing_service or BillingService(get_billing_model(model=model))
 
     if active_options.faq_retrieval and rag_pipeline is None:
-        rag_pipeline = _LazyDefaultRAGPipeline()
+        rag_pipeline = _DEFAULT_RAG_PIPELINE
 
     builder = StateGraph(
         SupportRouterState,
@@ -483,4 +494,4 @@ def build_unified_support_graph(
     builder.add_edge("tech_support_answer", END)
     builder.add_edge("billing_answer", END)
 
-    return builder.compile(checkpointer=checkpointer or MemorySaver())
+    return builder.compile(checkpointer=checkpointer)

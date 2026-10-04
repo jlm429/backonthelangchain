@@ -11,7 +11,7 @@ SYSTEM_ALIASES: dict[SystemName, tuple[str, ...]] = {
     "authentication": ("authentication", "auth", "login", "log in", "sign in", "mfa"),
     "billing": ("billing", "invoice", "charge", "subscription", "payment"),
     "checkout": ("checkout", "purchase", "cart", "order"),
-    "api": ("api", "endpoint", "webhook", "request"),
+    "api": ("api", "endpoint", "webhook"),
 }
 
 OUTAGE_MARKERS = (
@@ -28,6 +28,17 @@ OUTAGE_MARKERS = (
     "unable",
 )
 CLAUSE_BOUNDARY = re.compile(r"[.!?;]+|\b(?:but|while|whereas)\b")
+PHRASE_BOUNDARY = re.compile(r",+|\band\b")
+HEALTHY_MARKERS = (
+    "available",
+    "fine",
+    "healthy",
+    "normal",
+    "ok",
+    "okay",
+    "operational",
+    "up",
+)
 
 
 def _contains_phrase(text: str, phrase: str) -> bool:
@@ -48,6 +59,14 @@ def _contains_affirmative_outage_marker(text: str, marker: str) -> bool:
     return False
 
 
+def _mentioned_systems(text: str) -> set[SystemName]:
+    return {
+        system
+        for system, aliases in SYSTEM_ALIASES.items()
+        if any(_contains_phrase(text, alias) for alias in aliases)
+    }
+
+
 def build_simulated_status_evidence(
     user_query: str,
     statuses: dict[SystemName, SystemStatusLevel],
@@ -57,20 +76,30 @@ def build_simulated_status_evidence(
     reported_systems: set[SystemName] = set()
     unspecified_report = False
     for clause in CLAUSE_BOUNDARY.split(normalized_query):
-        if not any(
-            _contains_affirmative_outage_marker(clause, marker)
-            for marker in OUTAGE_MARKERS
-        ):
-            continue
-        clause_systems = {
-            system
-            for system, aliases in SYSTEM_ALIASES.items()
-            if any(_contains_phrase(clause, alias) for alias in aliases)
-        }
-        if clause_systems:
-            reported_systems.update(clause_systems)
-        else:
-            unspecified_report = True
+        pending_systems: set[SystemName] = set()
+        for phrase in PHRASE_BOUNDARY.split(clause):
+            phrase_systems = _mentioned_systems(phrase)
+            has_affirmative_marker = any(
+                _contains_affirmative_outage_marker(phrase, marker)
+                for marker in OUTAGE_MARKERS
+            )
+            if has_affirmative_marker:
+                associated_systems = pending_systems | phrase_systems
+                if associated_systems:
+                    reported_systems.update(associated_systems)
+                else:
+                    unspecified_report = True
+                pending_systems.clear()
+                continue
+
+            has_status_language = any(
+                _contains_phrase(phrase, marker)
+                for marker in (*OUTAGE_MARKERS, *HEALTHY_MARKERS)
+            )
+            if phrase_systems and not has_status_language:
+                pending_systems.update(phrase_systems)
+            else:
+                pending_systems.clear()
 
     reports: list[dict[str, Any]] = []
     if unspecified_report and not reported_systems:

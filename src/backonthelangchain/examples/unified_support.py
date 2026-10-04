@@ -195,12 +195,6 @@ class UnifiedSupportRunner:
         self.graph_factory = graph_factory or (
             lambda options: build_unified_support_graph(options=options)
         )
-        self._graphs: dict[UnifiedSupportOptions, Any] = {}
-
-    def _graph(self, options: UnifiedSupportOptions):
-        if options not in self._graphs:
-            self._graphs[options] = self.graph_factory(options)
-        return self._graphs[options]
 
     async def events(
         self,
@@ -217,17 +211,15 @@ class UnifiedSupportRunner:
         }
 
         try:
-            graph = self._graph(
+            graph = self.graph_factory(
                 UnifiedSupportOptions(faq_retrieval=request.options.faq_retrieval)
             )
             graph_input = {
                 "user_query": request.query,
                 "simulated_status": request.simulated_status.model_dump(mode="json"),
             }
-            config = {"configurable": {"thread_id": f"support-{run_id}"}}
             async for event in graph.astream_events(
                 graph_input,
-                config=config,
                 version="v2",
             ):
                 event_name = event.get("event")
